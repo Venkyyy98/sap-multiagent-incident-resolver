@@ -1,12 +1,19 @@
 #!/bin/bash
 set -e
 
+if [ -z "$1" ]; then
+  echo "Usage: bash trigger_flow.sh <endpoint-url>"
+  echo "Example: bash trigger_flow.sh https://b640c356trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/testtimeout"
+  exit 1
+fi
+
+ENDPOINT="$1"
+
 read -p "SAP BTP username (email): " CPI_USER
 read -s -p "SAP BTP password: " CPI_PASS
 echo
 echo
 
-ENDPOINT="https://b640c356trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/testoauthfail"
 COOKIE_JAR=$(mktemp)
 
 echo "=== Step 1: Fetching CSRF token ==="

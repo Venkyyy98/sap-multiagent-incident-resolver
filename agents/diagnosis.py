@@ -8,7 +8,11 @@ from rag.retrieve import retrieve_similar
 def diagnosis_agent(state: IncidentState) -> IncidentState:
     inc = state["enriched"]
     query = f"{inc['error_type']}: {inc['message']}"
-    hits = retrieve_similar(query, k=3)
+    try:
+        hits = retrieve_similar(query, k=3)
+    except Exception as e:
+        hits = []  # retrieval down (e.g. embedding API unreachable) → proceed with no KB grounding
+        state["log"].append(f"[Diagnosis] KB retrieval unavailable ({type(e).__name__}) — continuing without historical context")
     context = "\n".join(f"- ({h['similarity']}) {h['text']}" for h in hits)
 
     prompt = f"""Incident: {json.dumps(inc, indent=2)}

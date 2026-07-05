@@ -46,7 +46,7 @@ def classify_error_type(message: str) -> str:
     msg = message.lower()
     if "invalid_client" in msg or "unauthorized" in msg or "status code:401" in msg:
         return "AUTH_FAILURE"
-    if "timeout" in msg or "timed out" in msg:
+    if "timeout" in msg or "timed out" in msg or "remotely closed" in msg:
         return "HTTP_TIMEOUT"
     if "mapping" in msg or "cast" in msg or "xsd:date" in msg:
         return "MAPPING_ERROR"
@@ -83,7 +83,31 @@ def fetch_failed_messages(top: int = 20) -> list[dict]:
 
 if __name__ == "__main__":
     import json
+    import sys
     from pathlib import Path
-    data = fetch_failed_messages()
+
+    missing = [k for k, v in {"CPI_TOKEN_URL": TOKEN_URL, "CPI_CLIENT_ID": CLIENT_ID,
+                              "CPI_CLIENT_SECRET": CLIENT_SECRET, "CPI_BASE_URL": BASE_URL}.items() if not v]
+    if missing:
+        print(f"ERROR: missing required .env values: {', '.join(missing)}")
+        print("Set these in .env (see the module docstring at the top of this file), then re-run.")
+        sys.exit(1)
+
+    try:
+        data = fetch_failed_messages()
+    except requests.exceptions.Timeout:
+        print("ERROR: SAP CPI request timed out. Check your network and that the tenant is reachable.")
+        sys.exit(1)
+    except requests.exceptions.ConnectionError:
+        print(f"ERROR: could not connect to SAP CPI at {BASE_URL}. Check CPI_BASE_URL and your network.")
+        sys.exit(1)
+    except requests.exceptions.HTTPError as e:
+        code = e.response.status_code if e.response is not None else "?"
+        if code in (401, 403):
+            print(f"ERROR: authentication failed ({code}). Your CPI client credentials may be wrong or expired.")
+        else:
+            print(f"ERROR: SAP CPI returned HTTP {code}. Response: {e.response.text[:300] if e.response is not None else ''}")
+        sys.exit(1)
+
     Path("data/live_incidents.json").write_text(json.dumps(data, indent=2))
     print(f"Pulled {len(data)} live incidents from SAP CPI → data/live_incidents.json")

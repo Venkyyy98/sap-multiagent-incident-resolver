@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from orchestrator.graph import pipeline
@@ -29,7 +29,22 @@ class Incident(BaseModel):
 
 @app.post("/resolve")
 def resolve(incident: Incident):
-    result = pipeline.invoke({"incident": incident.model_dump(), "log": []})
+    try:
+        result = pipeline.invoke({"incident": incident.model_dump(), "log": []})
+    except Exception as e:
+        # Never surface a raw 500 to the dashboard — return a structured, human-readable failure
+        return JSONResponse(status_code=200, content={
+            "incident_id": incident.incident_id,
+            "error": f"Pipeline failed: {type(e).__name__}: {e}",
+            "priority_score": 0,
+            "diagnosis": {"root_cause": "Pipeline error — see error field", "confidence": 0.0},
+            "remediation": {"action": "ESCALATE", "steps": ["Pipeline failed — manual review required"], "risk": "HIGH"},
+            "auto_approved": False,
+            "needs_human": True,
+            "report": None,
+            "report_markdown": "",
+            "trace": [f"[Error] {type(e).__name__}: {e}"],
+        })
     return {
         "incident_id": incident.incident_id,
         "priority_score": result["priority_score"],
