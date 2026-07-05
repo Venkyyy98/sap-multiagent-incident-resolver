@@ -1,0 +1,8 @@
+[
+  {"id": "KB-001", "error_type": "HTTP_TIMEOUT", "text": "Salesforce OData timeouts on payloads over 2MB were resolved by enabling pagination (batch size 200) in the request-reply step and raising the HTTP adapter timeout to 120s. Root cause: large payload synchronous call.", "resolution": "ENABLE_PAGINATION"},
+  {"id": "KB-002", "error_type": "AUTH_FAILURE", "text": "401 invalid_client on OAuth2 token endpoint historically caused by expired client secret in the security material. Fix: rotate credentials in CPI Keystore/Security Material, redeploy iFlow, retry failed messages.", "resolution": "ROTATE_CREDENTIALS"},
+  {"id": "KB-003", "error_type": "MAPPING_ERROR", "text": "EDI DTM segment missing causes xsd:date cast failures. Fix: add ifWithoutElse + mapWithDefault in message mapping for optional date fields; coordinate with trading partner to send DTM qualifier 017.", "resolution": "PATCH_MAPPING"},
+  {"id": "KB-004", "error_type": "IDOC_FAILURE", "text": "Partner profile not found errors require WE20 partner profile creation for the logical system and reprocessing stuck tRFC entries in SM58. CPI side needs no change.", "resolution": "ESCALATE_TO_BASIS"},
+  {"id": "KB-005", "error_type": "CERT_EXPIRY", "text": "SFTP known_hosts mismatches after bank server migrations resolved by re-importing the new SSH host key into CPI Keystore known_hosts and redeploying. Certificate expiry requires renewal before deadline.", "resolution": "UPDATE_KEYSTORE"},
+  {"id": "KB-006", "error_type": "HTTP_TIMEOUT", "text": "Recurring timeouts during month-end load resolved via async decoupling with JMS queue between sender and receiver, smoothing peak throughput.", "resolution": "ASYNC_DECOUPLE"}
+]

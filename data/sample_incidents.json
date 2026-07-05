@@ -1,0 +1,52 @@
+[
+  {
+    "incident_id": "INC-1001",
+    "iflow": "S4_to_Salesforce_OrderSync",
+    "timestamp": "2026-07-01T08:14:22Z",
+    "error_type": "HTTP_TIMEOUT",
+    "message": "com.sap.it.rt.adapter.http.api.exception.HttpResponseException: Read timed out after 60000ms calling https://api.salesforce.com/services/data/v58.0/sobjects/Order",
+    "payload_size_kb": 4200,
+    "retry_count": 3,
+    "severity": "P2"
+  },
+  {
+    "incident_id": "INC-1002",
+    "iflow": "SF_EC_to_S4_Employee",
+    "timestamp": "2026-07-01T09:02:10Z",
+    "error_type": "AUTH_FAILURE",
+    "message": "401 Unauthorized: OAuth2 token request failed - invalid_client. Client credentials rejected by token endpoint https://auth.example.com/oauth/token",
+    "payload_size_kb": 12,
+    "retry_count": 5,
+    "severity": "P1"
+  },
+  {
+    "incident_id": "INC-1003",
+    "iflow": "EDI_856_ASN_Inbound",
+    "timestamp": "2026-07-01T10:45:33Z",
+    "error_type": "MAPPING_ERROR",
+    "message": "Message Mapping failed: RuntimeException in target field /ASN/DeliveryDate - Cannot cast empty string to xsd:date. Source segment DTM missing in EDI payload",
+    "payload_size_kb": 88,
+    "retry_count": 0,
+    "severity": "P2"
+  },
+  {
+    "incident_id": "INC-1004",
+    "iflow": "IDoc_ORDERS05_to_S4",
+    "timestamp": "2026-07-01T11:20:05Z",
+    "error_type": "IDOC_FAILURE",
+    "message": "IDoc adapter error: Partner profile not found for partner LS/VENDOR_ACME/ORDERS05. tRFC queue entry stuck in SM58",
+    "payload_size_kb": 34,
+    "retry_count": 1,
+    "severity": "P1"
+  },
+  {
+    "incident_id": "INC-1005",
+    "iflow": "Bank_Payment_SFTP_Push",
+    "timestamp": "2026-07-01T12:07:44Z",
+    "error_type": "CERT_EXPIRY",
+    "message": "SFTP connection failed: SSH host key verification failed. Known_hosts entry outdated after bank server migration; certificate expires 2026-07-03",
+    "payload_size_kb": 210,
+    "retry_count": 2,
+    "severity": "P1"
+  }
+]

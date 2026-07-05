@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SAP IntelliOps — Multi-Agent Incident Resolver</title>
+<style>
+  :root{--bg:#0f1117;--card:#181c26;--border:#2a2f3d;--accent:#4f8cff;--good:#3ecf8e;--warn:#f5a623;--bad:#ff5c5c;--text:#e6e8ee;--muted:#8b93a7}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:32px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .badge{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+  .P1{background:#3a1720;color:var(--bad)} .P2{background:#3a2f14;color:var(--warn)} .P3{background:#12291f;color:var(--good)}
+  .msg{color:var(--muted);font-size:12.5px;font-family:monospace;line-height:1.5;background:#10131b;padding:8px;border-radius:6px;margin:8px 0}
+  button{background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
+  button:hover{opacity:.85}
+  button:disabled{opacity:.4;cursor:wait}
+  .result{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;display:none}
+  .kv{display:flex;justify-content:space-between;margin:4px 0}
+  .kv b{color:var(--text)} .kv span{color:var(--muted)}
+  .status{font-weight:700}
+  .approved{color:var(--good)} .human{color:var(--warn)}
+  .trace{font-family:monospace;font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-wrap}
+  .conf-bar{height:6px;background:#10131b;border-radius:3px;overflow:hidden;margin-top:4px}
+  .conf-fill{height:100%;background:var(--accent)}
+</style>
+</head>
+<body>
+  <h1>🔧 SAP IntelliOps — Multi-Agent Incident Resolver</h1>
+  <div class="sub">Monitor → Diagnosis (RAG) → Remediation → Reporting · Live pipeline demo</div>
+  <div class="sub" style="margin-bottom:8px">🟢 Live Incidents — pulled from your SAP CPI tenant</div>
+  <div id="grid-live" class="grid"><div class="card">Loading live incidents…</div></div>
+
+  <div class="sub" style="margin:28px 0 8px">Sample Incidents — canned demo data</div>
+  <div id="grid-sample" class="grid"><div class="card">Loading sample incidents…</div></div>
+
+<script>
+const API = window.location.origin;
+
+function renderGrid(gridId, incidents, emptyText){
+  const grid = document.getElementById(gridId);
+  if (!incidents.length){
+    grid.innerHTML = `<div class="card">${emptyText}</div>`;
+    return;
+  }
+  grid.innerHTML = incidents.map(inc => `
+    <div class="card" id="card-${inc.incident_id}">
+      <div class="row">
+        <div><b>${inc.incident_id}</b> — ${inc.iflow}</div>
+        <span class="badge ${inc.severity}">${inc.severity}</span>
+      </div>
+      <div class="msg">${inc.error_type}: ${inc.message}</div>
+      <button onclick='resolveIncident(${JSON.stringify(JSON.stringify(inc))})'>▶ Run Agent Pipeline</button>
+      <div class="result" id="result-${inc.incident_id}"></div>
+    </div>
+  `).join('');
+}
+
+async function loadIncidents(){
+  const [liveRes, sampleRes] = await Promise.all([
+    fetch(`${API}/incidents/live`),
+    fetch(`${API}/incidents/sample`),
+  ]);
+  renderGrid('grid-live', await liveRes.json(), 'No live incidents yet — trigger a failure in your SAP CPI tenant, then run "python -m connectors.sap_cpi" and refresh this page.');
+  renderGrid('grid-sample', await sampleRes.json(), 'No sample incidents found.');
+}
+
+async function resolveIncident(incJson){
+  const inc = JSON.parse(incJson);
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Running agents…';
+  const res = await fetch(`${API}/resolve`, {method:'POST', headers:{'Content-Type':'application/json'}, body: incJson});
+  const data = await res.json();
+  btn.disabled = false; btn.textContent = '↻ Re-run';
+  const box = document.getElementById(`result-${inc.incident_id}`);
+  box.style.display = 'block';
+  const statusClass = data.auto_approved ? 'approved' : 'human';
+  const statusText = data.auto_approved ? '✅ Auto-approved' : '⚠ Needs human review';
+  box.innerHTML = `
+    <div class="kv"><b>Priority score</b><span>${data.priority_score}</span></div>
+    <div class="kv"><b>Root cause</b><span>${data.diagnosis.root_cause}</span></div>
+    <div class="kv"><b>Confidence</b><span>${(data.diagnosis.confidence*100).toFixed(0)}%</span></div>
+    <div class="conf-bar"><div class="conf-fill" style="width:${data.diagnosis.confidence*100}%"></div></div>
+    <div class="kv"><b>Action</b><span>${data.remediation.action}</span></div>
+    <div class="kv"><b>Status</b><span class="status ${statusClass}">${statusText}</span></div>
+    <div class="trace">${data.trace.join('\n')}</div>
+  `;
+}
+
+loadIncidents();
+</script>
+</body>
+</html>
