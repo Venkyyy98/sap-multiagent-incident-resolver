@@ -1,48 +1,112 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SAP IntelliOps — Multi-Agent Incident Resolver</title>
 <style>
-  :root{--bg:#0f1117;--card:#181c26;--border:#2a2f3d;--accent:#4f8cff;--good:#3ecf8e;--warn:#f5a623;--bad:#ff5c5c;--text:#e6e8ee;--muted:#8b93a7}
+  :root{
+    --shell:#354a5f; --shell-text:#fff;
+    --bg:#f5f6f7; --card:#fff; --border:#e5e5e5; --border-strong:#d9d9d9;
+    --blue:#0a6ed1; --blue-dark:#0854a0;
+    --text:#32363a; --muted:#6a6d70;
+    --good:#107e3e; --good-bg:#f1faf1;
+    --warn:#e9730c; --warn-bg:#fef7f1;
+    --bad:#bb0000; --bad-bg:#ffebeb;
+    --code-bg:#f4f4f5; --code-border:#e0e0e0;
+  }
   *{box-sizing:border-box}
-  body{background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:32px}
-  h1{font-size:22px;margin:0 0 4px}
-  .sub{color:var(--muted);font-size:13px;margin-bottom:28px}
+  body{background:var(--bg);color:var(--text);
+    font-family:"72","72full",-apple-system,"Segoe UI",Roboto,sans-serif;margin:0}
+  /* Fiori shell bar */
+  .shell{background:var(--shell);color:var(--shell-text);height:48px;display:flex;
+    align-items:center;padding:0 20px;gap:12px;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  .shell .logo{font-weight:700;font-size:15px;letter-spacing:.3px}
+  .shell .divider{width:1px;height:22px;background:rgba(255,255,255,.25)}
+  .shell .app-name{font-size:14px;opacity:.9}
+  .shell .spacer{flex:1}
+  .shell .pill{font-size:11px;background:rgba(255,255,255,.14);padding:3px 10px;border-radius:12px}
+  /* content */
+  .content{padding:24px 28px;max-width:1400px;margin:0 auto}
+  .flow{color:var(--muted);font-size:13px;margin:0 0 20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .flow .step{background:#fff;border:1px solid var(--border);border-radius:16px;padding:3px 12px;font-weight:600;color:var(--text)}
+  .flow .arrow{color:var(--blue)}
+  .section-head{display:flex;align-items:center;gap:8px;margin:26px 0 12px}
+  .section-head h2{font-size:15px;font-weight:700;margin:0}
+  .section-head .dot{width:8px;height:8px;border-radius:50%}
+  .dot-live{background:var(--good)} .dot-sample{background:var(--muted)}
+  .section-head .count{font-size:12px;color:var(--muted);font-weight:400}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
-  .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-  .badge{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
-  .P1{background:#3a1720;color:var(--bad)} .P2{background:#3a2f14;color:var(--warn)} .P3{background:#12291f;color:var(--good)}
-  .msg{color:var(--muted);font-size:12.5px;font-family:monospace;line-height:1.5;background:#10131b;padding:8px;border-radius:6px;margin:8px 0}
-  button{background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
-  button:hover{opacity:.85}
-  button:disabled{opacity:.4;cursor:wait}
-  .result{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;display:none}
-  .kv{display:flex;justify-content:space-between;margin:4px 0}
-  .kv b{color:var(--text)} .kv span{color:var(--muted)}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;
+    box-shadow:0 1px 4px rgba(0,0,0,.06);transition:box-shadow .15s}
+  .card:hover{box-shadow:0 3px 12px rgba(0,0,0,.09)}
+  .row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:10px}
+  .title{font-weight:700;font-size:14px;line-height:1.4}
+  .title .iflow{color:var(--muted);font-weight:400}
+  /* Fiori ObjectStatus pill */
+  .badge{padding:3px 10px;border-radius:14px;font-size:11px;font-weight:700;white-space:nowrap}
+  .P1{background:var(--bad-bg);color:var(--bad)} .P2{background:var(--warn-bg);color:var(--warn)} .P3{background:var(--good-bg);color:var(--good)}
+  .msg{color:var(--text);font-size:12px;font-family:"SF Mono",Consolas,Menlo,monospace;line-height:1.55;
+    background:var(--code-bg);border:1px solid var(--code-border);padding:10px;border-radius:8px;margin:10px 0;
+    word-break:break-word;max-height:96px;overflow-y:auto}
+  button{background:var(--blue);color:#fff;border:none;padding:9px 16px;border-radius:8px;cursor:pointer;
+    font-size:13px;font-weight:700;font-family:inherit}
+  button:hover{background:var(--blue-dark)}
+  button:disabled{opacity:.5;cursor:wait}
+  .result{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:13px;display:none}
+  .kv{display:flex;justify-content:space-between;margin:6px 0;gap:12px}
+  .kv b{color:var(--muted);font-weight:600;white-space:nowrap} .kv span{color:var(--text);text-align:right}
   .status{font-weight:700}
   .approved{color:var(--good)} .human{color:var(--warn)}
-  .trace{font-family:monospace;font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-wrap}
-  .conf-bar{height:6px;background:#10131b;border-radius:3px;overflow:hidden;margin-top:4px}
-  .conf-fill{height:100%;background:var(--accent)}
-  .steps{margin:6px 0 0;padding-left:18px;color:var(--text)}
-  .steps li{margin-bottom:3px}
-  .risk{padding:1px 6px;border-radius:5px;font-size:10px;font-weight:700;margin-left:6px}
-  .risk-LOW{background:#12291f;color:var(--good)} .risk-MEDIUM{background:#3a2f14;color:var(--warn)} .risk-HIGH{background:#3a1720;color:var(--bad)}
-  .report-toggle{background:none;color:var(--accent);padding:0;font-size:12px;font-weight:600;margin-top:10px}
-  .report-toggle:hover{opacity:.7}
-  .report{display:none;font-family:monospace;font-size:11px;color:var(--muted);white-space:pre-wrap;background:#10131b;padding:10px;border-radius:6px;margin-top:8px;max-height:400px;overflow-y:auto}
+  .conf-wrap{margin:8px 0 4px}
+  .conf-bar{height:8px;background:#ededed;border-radius:4px;overflow:hidden;margin-top:5px}
+  .conf-fill{height:100%;background:var(--blue);border-radius:4px;transition:width .5s ease}
+  .steps{margin:8px 0 4px;padding-left:20px;color:var(--text)}
+  .steps li{margin-bottom:4px}
+  .risk{padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;margin-left:8px}
+  .risk-LOW{background:var(--good-bg);color:var(--good)} .risk-MEDIUM{background:var(--warn-bg);color:var(--warn)} .risk-HIGH{background:var(--bad-bg);color:var(--bad)}
+  .trace{font-family:"SF Mono",Consolas,Menlo,monospace;font-size:11px;color:var(--muted);margin-top:10px;
+    white-space:pre-wrap;background:var(--code-bg);border:1px solid var(--code-border);padding:10px;border-radius:8px}
+  .report-toggle{background:none;color:var(--blue);padding:4px 0;font-size:12px;font-weight:700;margin-top:12px}
+  .report-toggle:hover{background:none;text-decoration:underline}
+  .report{display:none;font-family:"SF Mono",Consolas,Menlo,monospace;font-size:11px;color:var(--text);
+    white-space:pre-wrap;background:var(--code-bg);border:1px solid var(--code-border);padding:12px;border-radius:8px;
+    margin-top:8px;max-height:420px;overflow-y:auto}
+  .empty{color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
-  <h1>🔧 SAP IntelliOps — Multi-Agent Incident Resolver</h1>
-  <div class="sub">Monitor → Diagnosis (RAG) → Remediation → Reporting · Live pipeline demo</div>
-  <div class="sub" style="margin-bottom:8px">🟢 Live Incidents — pulled from your SAP CPI tenant</div>
-  <div id="grid-live" class="grid"><div class="card">Loading live incidents…</div></div>
+  <div class="shell">
+    <span class="logo">SAP IntelliOps</span>
+    <span class="divider"></span>
+    <span class="app-name">Multi-Agent Incident Resolver</span>
+    <span class="spacer"></span>
+    <span class="pill">SAP Cloud Integration · Trial</span>
+  </div>
 
-  <div class="sub" style="margin:28px 0 8px">Sample Incidents — canned demo data</div>
-  <div id="grid-sample" class="grid"><div class="card">Loading sample incidents…</div></div>
+  <div class="content">
+    <div class="flow">
+      <span class="step">Monitor</span><span class="arrow">→</span>
+      <span class="step">Diagnosis (RAG)</span><span class="arrow">→</span>
+      <span class="step">Remediation</span><span class="arrow">→</span>
+      <span class="step">Reporting</span>
+    </div>
+
+    <div class="section-head">
+      <span class="dot dot-live"></span>
+      <h2>Live Incidents</h2>
+      <span class="count" id="live-count">— pulled from your SAP CPI tenant</span>
+    </div>
+    <div id="grid-live" class="grid"><div class="card empty">Loading live incidents…</div></div>
+
+    <div class="section-head">
+      <span class="dot dot-sample"></span>
+      <h2>Sample Incidents</h2>
+      <span class="count">canned demo data</span>
+    </div>
+    <div id="grid-sample" class="grid"><div class="card empty">Loading sample incidents…</div></div>
+  </div>
 
 <script>
 const API = window.location.origin;
@@ -62,16 +126,16 @@ function toggleReport(id){
 function renderGrid(gridId, incidents, emptyText){
   const grid = document.getElementById(gridId);
   if (!incidents.length){
-    grid.innerHTML = `<div class="card">${emptyText}</div>`;
+    grid.innerHTML = `<div class="card empty">${emptyText}</div>`;
     return;
   }
   grid.innerHTML = incidents.map(inc => `
     <div class="card" id="card-${inc.incident_id}">
       <div class="row">
-        <div><b>${inc.incident_id}</b> — ${inc.iflow}</div>
-        <span class="badge ${inc.severity}">${inc.severity}</span>
+        <div class="title">${escapeHtml(inc.incident_id)} <span class="iflow">— ${escapeHtml(inc.iflow)}</span></div>
+        <span class="badge ${inc.severity}">${escapeHtml(inc.severity)}</span>
       </div>
-      <div class="msg">${inc.error_type}: ${inc.message}</div>
+      <div class="msg">${escapeHtml(inc.error_type)}: ${escapeHtml(inc.message)}</div>
       <button onclick='resolveIncident(${JSON.stringify(JSON.stringify(inc))})'>▶ Run Agent Pipeline</button>
       <div class="result" id="result-${inc.incident_id}"></div>
     </div>
@@ -83,7 +147,10 @@ async function loadIncidents(){
     fetch(`${API}/incidents/live`),
     fetch(`${API}/incidents/sample`),
   ]);
-  renderGrid('grid-live', await liveRes.json(), 'No live incidents yet — trigger a failure in your SAP CPI tenant, then run "python -m connectors.sap_cpi" and refresh this page.');
+  const live = await liveRes.json();
+  document.getElementById('live-count').textContent =
+    live.length ? `${live.length} pulled from your SAP CPI tenant` : '— pulled from your SAP CPI tenant';
+  renderGrid('grid-live', live, 'No live incidents yet — trigger a failure in your SAP CPI tenant, then run "python -m connectors.sap_cpi" and refresh this page.');
   renderGrid('grid-sample', await sampleRes.json(), 'No sample incidents found.');
 }
 
@@ -96,18 +163,24 @@ async function resolveIncident(incJson){
   btn.disabled = false; btn.textContent = '↻ Re-run';
   const box = document.getElementById(`result-${inc.incident_id}`);
   box.style.display = 'block';
+  if (data.error){
+    box.innerHTML = `<div class="kv"><b>Status</b><span class="status human">⚠ ${escapeHtml(data.error)}</span></div>`;
+    return;
+  }
   const statusClass = data.auto_approved ? 'approved' : 'human';
-  const statusText = data.auto_approved ? '✅ Auto-approved' : '⚠ Needs human review';
+  const statusText = data.auto_approved ? '✔ Auto-approved' : '⚠ Needs human review';
   const stepsHtml = (data.remediation.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
   box.innerHTML = `
     <div class="kv"><b>Priority score</b><span>${data.priority_score}</span></div>
     <div class="kv"><b>Root cause</b><span>${escapeHtml(data.diagnosis.root_cause)}</span></div>
-    <div class="kv"><b>Confidence</b><span>${(data.diagnosis.confidence*100).toFixed(0)}%</span></div>
-    <div class="conf-bar"><div class="conf-fill" style="width:${data.diagnosis.confidence*100}%"></div></div>
-    <div class="kv"><b>Action</b><span>${escapeHtml(data.remediation.action)}<span class="risk risk-${data.remediation.risk}">${data.remediation.risk} RISK</span></span></div>
+    <div class="conf-wrap">
+      <div class="kv"><b>Confidence</b><span>${(data.diagnosis.confidence*100).toFixed(0)}%</span></div>
+      <div class="conf-bar"><div class="conf-fill" style="width:${data.diagnosis.confidence*100}%"></div></div>
+    </div>
+    <div class="kv"><b>Recommended action</b><span>${escapeHtml(data.remediation.action)}<span class="risk risk-${data.remediation.risk}">${escapeHtml(data.remediation.risk)} RISK</span></span></div>
     <ol class="steps">${stepsHtml}</ol>
     <div class="kv"><b>Status</b><span class="status ${statusClass}">${statusText}</span></div>
-    <div class="trace">${data.trace.join('\n')}</div>
+    <div class="trace">${data.trace.map(escapeHtml).join('\n')}</div>
     <button class="report-toggle" id="report-btn-${inc.incident_id}" onclick="toggleReport('${inc.incident_id}')">▾ View full postmortem report</button>
     <div class="report" id="report-${inc.incident_id}">${escapeHtml(data.report_markdown)}</div>
   `;
