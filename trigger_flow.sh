@@ -3,7 +3,7 @@ set -e
 
 if [ -z "$1" ]; then
   echo "Usage: bash trigger_flow.sh <endpoint-url>"
-  echo "Example: bash trigger_flow.sh https://b640c356trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/testtimeout"
+  echo "Example: bash trigger_flow.sh https://<your-tenant>.it-cpitrial05-rt.<region>.hana.ondemand.com/http/testtimeout"
   exit 1
 fi
 
