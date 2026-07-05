@@ -1,87 +1,146 @@
-# SAP IntelliOps — Multi-Agent Incident Resolution System
+# SAP IntelliOps — Multi-Agent Incident Resolver
 
-An AI-powered multi-agent system that autonomously monitors, diagnoses, remediates, and reports on SAP CPI (Cloud Platform Integration) iFlow failures — built with **LangGraph**, **RAG (ChromaDB)**, and **Claude/LLM APIs**.
+A multi-agent AI system that **monitors, diagnoses, and recommends remediation** for SAP Cloud Integration (CPI) iFlow failures — built with **LangGraph**, **RAG (ChromaDB + OpenAI embeddings)**, and the **OpenAI API**.
+
+It connects to a **real SAP CPI tenant**, pulls genuinely-failed messages, and runs each one through a 4-agent pipeline that produces a grounded root-cause, a confidence-scored fix recommendation, and an automatic postmortem.
+
+> **Decision-support, not auto-execution.** This system diagnoses failures and *recommends* remediation for an engineer (or downstream automation) to carry out. It does **not** execute changes against the SAP tenant — a deliberate design choice, since actions like rotating credentials require access to systems outside the pipeline's control and should stay human-approved.
 
 ## Why this project
-SAP integration landscapes generate thousands of iFlow errors (OData timeouts, auth failures, mapping errors, IDoc issues). Manual triage is slow. This system uses **4 specialized AI agents orchestrated as a graph** to cut mean-time-to-resolution.
+
+SAP integration landscapes generate large volumes of iFlow errors — OAuth failures, HTTP timeouts, mapping errors, IDoc issues. The expensive part of resolution is usually **triage**: a human opens Monitor, reads a raw stack trace, recalls what that error class means, and figures out the fix.
+
+This system compresses that triage: it matches each failure against a knowledge base of resolved incidents, returns a specific numbered action plan, and uses a confidence threshold so only genuinely uncertain failures interrupt a human — while producing a consistent audit trail for every incident.
 
 ## Architecture
 
 ```
                 ┌──────────────────────────────────────────┐
-                │            LangGraph Orchestrator         │
+                │            LangGraph Orchestrator          │
                 └──────────────────────────────────────────┘
- Incident ──▶ Monitor Agent ──▶ Diagnosis Agent ──▶ Remediation Agent ──▶ Reporting Agent
-              (detect/enrich)    (RAG + LLM root      (action plan,        (postmortem,
-                                  cause analysis)      auto-fix/escalate)   notifications)
-                                       │
-                                       ▼
-                               ChromaDB Vector Store
-                            (historical incident KB)
+ Incident ──▶ Monitor ──▶ Diagnosis ──▶ Remediation ──▶ Reporting
+             (enrich,     (RAG + LLM     (action plan +    (postmortem +
+              priority)    root cause)    confidence gate)   audit trail)
+                              │
+                              ▼
+                     ChromaDB Vector Store
+                  (resolved-incident knowledge base)
+```
+
+Real failures reach the pipeline through a live connector:
+
+```
+ SAP CPI Trial iFlow ──▶ MessageProcessingLogs OData API ──▶ connectors/sap_cpi.py ──▶ data/live_incidents.json ──▶ pipeline
 ```
 
 ### Agents
-| Agent | Role | Key concepts demonstrated |
-|---|---|---|
-| **Monitor** | Ingests CPI logs, detects anomalies, enriches context | Event-driven pipelines, structured parsing |
-| **Diagnosis** | Root-cause analysis using RAG over historical incidents + LLM reasoning | RAG, embeddings, prompt engineering |
-| **Remediation** | Decides fix strategy (retry / restart / reprocess / escalate) with confidence gating | Tool use, human-in-the-loop, guardrails |
-| **Reporting** | Generates postmortem + stakeholder summary | LLM summarization, structured output |
 
-### Key AI/ML Engineering concepts covered
-- Multi-agent orchestration with **LangGraph** (state machines, conditional edges)
-- **RAG** pipeline: chunking, embeddings, vector search (ChromaDB)
-- **Human-in-the-loop** gating for low-confidence remediations
-- **Structured LLM outputs** (Pydantic validation)
-- **Mock LLM mode** for offline testing / CI
-- **FastAPI** service layer + REST API
-- Unit tests with pytest
+| Agent | Role |
+|---|---|
+| **Monitor** | Enriches the incident, extracts error keywords, computes a priority score from severity + retry exhaustion + payload size |
+| **Diagnosis** | RAG over a resolved-incident knowledge base + LLM reasoning → root cause, category, confidence |
+| **Remediation** | Maps the diagnosis to a concrete action plan (steps + risk), then applies a **confidence + risk gate** to auto-approve or escalate |
+| **Reporting** | Generates a markdown postmortem describing the *recommended* remediation and a full agent trace |
+
+### The human-in-the-loop gate
+
+A remediation is fast-tracked (`auto-approved`) only when **confidence ≥ 0.85 AND risk = LOW**. Anything below that is flagged **needs human review**. In practice:
+
+- A failure whose error text matches a known resolved pattern → high confidence → auto-approved.
+- A novel failure the knowledge base has never seen → low confidence → escalated.
+
+## Proven end-to-end against a real tenant
+
+Three failure types were **genuinely triggered** on a live SAP CPI trial tenant, pulled via the OData connector, and resolved through the pipeline:
+
+| iFlow | Failure triggered | Classified as | Confidence | Outcome |
+|---|---|---|---|---|
+| `Test-OAuth-Fail-Flow` | OAuth2 `invalid_client` (bad credentials) | `AUTH_FAILURE` | 0.88 | ✅ Auto-approved → `ROTATE_CREDENTIALS` |
+| `Test-Timeout-Flow` | HTTP timeout / connection dropped | `HTTP_TIMEOUT` | 0.88 | ✅ Auto-approved → `ASYNC_DECOUPLE` |
+| `Test-Fail-Flow` | Runtime exception in a Groovy script | `UNKNOWN` (no KB match) | 0.60 | ⚠ Escalated for human review |
+
+The remaining knowledge-base categories (`MAPPING_ERROR`, `IDOC_FAILURE`, `CERT_EXPIRY`) are demonstrated via curated sample incidents rather than live triggers, since reproducing them requires standing up additional backend infrastructure.
+
+## Key engineering concepts
+
+- **Multi-agent orchestration** with LangGraph (state graph, conditional routing — trivial noise skips straight to reporting)
+- **RAG** with a two-tier embedder: OpenAI `text-embedding-3-small` when a key is present, falling back to a deterministic offline hashed embedder for tests/CI
+- **Hybrid confidence signal** — LLM self-reported confidence is grounded against retrieval similarity, so novel patterns are forced to human review
+- **Human-in-the-loop gating** on confidence *and* risk
+- **Graceful degradation** — LLM outages, embedding-API failures, and unreachable-tenant errors all route to a safe, human-readable state instead of crashing
+- **Structured LLM outputs** validated with Pydantic
+- **Live dashboard** (SAP Fiori-inspired) + FastAPI REST layer
+- pytest suite
 
 ## Quickstart
 
 ```bash
 git clone https://github.com/Venkyyy98/sap-multiagent-incident-resolver.git
 cd sap-multiagent-incident-resolver
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # add OPENAI_API_KEY (or leave blank for mock mode)
+cp .env.example .env          # add OPENAI_API_KEY (leave blank to run in offline mock mode)
 
 # 1. Build the RAG knowledge base
 python -m rag.ingest
 
-# 2. Run the pipeline on sample incidents
+# 2. Run the pipeline over sample incidents
 python run_pipeline.py
 
 # 3. Start the API + dashboard
-uvicorn api.main:app --reload   # http://localhost:8000/docs
+uvicorn api.main:app --reload   # open http://localhost:8000
+```
+
+### Optional — connect a real SAP CPI tenant
+
+Add your Process Integration Runtime credentials to `.env`:
+
+```
+CPI_TOKEN_URL=https://<tenant>.authentication.<region>.hana.ondemand.com/oauth/token
+CPI_CLIENT_ID=...
+CPI_CLIENT_SECRET=...
+CPI_BASE_URL=https://<tenant>.<region>.hana.ondemand.com/api/v1
+```
+
+Then pull genuinely-failed messages into the dashboard:
+
+```bash
+python -m connectors.sap_cpi   # writes data/live_incidents.json
 ```
 
 ## Sample output
+
 ```
-[Monitor]     Detected P1 incident INC-1002: OAuth token failure on iFlow 'SF_EC_to_S4_Employee'
-[Diagnosis]   Root cause: expired client credentials (confidence 0.91) — matched 3 similar past incidents
-[Remediation] Action: ROTATE_CREDENTIALS + RETRY | auto-approved (confidence > 0.85)
-[Reporting]   Postmortem written to reports/INC-1002.md
+[Monitor]     AGpKfn6...clQM (P1) on 'Test-OAuth-Fail-Flow' — priority 1.00, impact HIGH
+[Diagnosis]   Expired client secret causing invalid_client error (confidence 0.88)
+[Remediation] ROTATE_CREDENTIALS | auto-approved
+[Reporting]   Postmortem written → reports/AGpKfn6...clQM.md
 ```
 
 ## Tech stack
-Python 3.11 · LangGraph · OpenAI API · ChromaDB · FastAPI · Pydantic · pytest · Docker
+
+Python 3.14 · LangGraph · OpenAI API (chat + embeddings) · ChromaDB · FastAPI · Pydantic · pytest · Docker
 
 ## Project structure
+
 ```
-agents/         # 4 specialized agents
+agents/         # 4 specialized agents (monitor, diagnosis, remediation, reporting)
 orchestrator/   # LangGraph state graph wiring
-rag/            # ingestion + retrieval (ChromaDB)
-api/            # FastAPI service
-data/           # sample CPI incident logs + knowledge base
+rag/            # ingestion + retrieval (ChromaDB, pluggable embedders)
+connectors/     # live SAP CPI OData connector
+api/            # FastAPI service + Fiori-inspired dashboard
+data/           # sample incidents, live incidents, knowledge base
 tests/          # pytest suite
 ```
 
 ## Roadmap
-- [ ] Live SAP CPI OData API connector (replace sample logs)
+
+- [ ] Optional executor agent — carry out low-risk, reversible actions (message resubmission, iFlow redeploy) behind an explicit action allowlist
 - [ ] Agent evaluation harness (LLM-as-judge)
 - [ ] Slack/Teams notification integration
-- [ ] Fine-tuned classifier for error categorization
+- [ ] Expand the resolved-incident knowledge base from real historical tickets
 
 ## Author
-**Venkatesh Mudaliar** — SAP BTP/CPI Consultant | AI/ML Engineer
+
+**Venkatesh Mudaliar** — SAP BTP/CPI Consultant · AI/ML Engineer
 [LinkedIn](https://linkedin.com/in/venkateshcmudaliar) · [GitHub](https://github.com/Venkyyy98)
