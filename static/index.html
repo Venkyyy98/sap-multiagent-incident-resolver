@@ -26,6 +26,13 @@
   .trace{font-family:monospace;font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-wrap}
   .conf-bar{height:6px;background:#10131b;border-radius:3px;overflow:hidden;margin-top:4px}
   .conf-fill{height:100%;background:var(--accent)}
+  .steps{margin:6px 0 0;padding-left:18px;color:var(--text)}
+  .steps li{margin-bottom:3px}
+  .risk{padding:1px 6px;border-radius:5px;font-size:10px;font-weight:700;margin-left:6px}
+  .risk-LOW{background:#12291f;color:var(--good)} .risk-MEDIUM{background:#3a2f14;color:var(--warn)} .risk-HIGH{background:#3a1720;color:var(--bad)}
+  .report-toggle{background:none;color:var(--accent);padding:0;font-size:12px;font-weight:600;margin-top:10px}
+  .report-toggle:hover{opacity:.7}
+  .report{display:none;font-family:monospace;font-size:11px;color:var(--muted);white-space:pre-wrap;background:#10131b;padding:10px;border-radius:6px;margin-top:8px;max-height:400px;overflow-y:auto}
 </style>
 </head>
 <body>
@@ -39,6 +46,18 @@
 
 <script>
 const API = window.location.origin;
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function toggleReport(id){
+  const el = document.getElementById(`report-${id}`);
+  const btn = document.getElementById(`report-btn-${id}`);
+  const open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? '▾ View full postmortem report' : '▴ Hide full postmortem report';
+}
 
 function renderGrid(gridId, incidents, emptyText){
   const grid = document.getElementById(gridId);
@@ -79,14 +98,18 @@ async function resolveIncident(incJson){
   box.style.display = 'block';
   const statusClass = data.auto_approved ? 'approved' : 'human';
   const statusText = data.auto_approved ? '✅ Auto-approved' : '⚠ Needs human review';
+  const stepsHtml = (data.remediation.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
   box.innerHTML = `
     <div class="kv"><b>Priority score</b><span>${data.priority_score}</span></div>
-    <div class="kv"><b>Root cause</b><span>${data.diagnosis.root_cause}</span></div>
+    <div class="kv"><b>Root cause</b><span>${escapeHtml(data.diagnosis.root_cause)}</span></div>
     <div class="kv"><b>Confidence</b><span>${(data.diagnosis.confidence*100).toFixed(0)}%</span></div>
     <div class="conf-bar"><div class="conf-fill" style="width:${data.diagnosis.confidence*100}%"></div></div>
-    <div class="kv"><b>Action</b><span>${data.remediation.action}</span></div>
+    <div class="kv"><b>Action</b><span>${escapeHtml(data.remediation.action)}<span class="risk risk-${data.remediation.risk}">${data.remediation.risk} RISK</span></span></div>
+    <ol class="steps">${stepsHtml}</ol>
     <div class="kv"><b>Status</b><span class="status ${statusClass}">${statusText}</span></div>
     <div class="trace">${data.trace.join('\n')}</div>
+    <button class="report-toggle" id="report-btn-${inc.incident_id}" onclick="toggleReport('${inc.incident_id}')">▾ View full postmortem report</button>
+    <div class="report" id="report-${inc.incident_id}">${escapeHtml(data.report_markdown)}</div>
   `;
 }
 

@@ -41,6 +41,22 @@ def fetch_error_message(guid: str, token: str) -> str:
     return resp.text.strip()
 
 
+def classify_error_type(message: str) -> str:
+    """Maps raw error text to the KB's failure categories (CPI's LogLevel is just a severity, not a category)."""
+    msg = message.lower()
+    if "invalid_client" in msg or "unauthorized" in msg or "status code:401" in msg:
+        return "AUTH_FAILURE"
+    if "timeout" in msg or "timed out" in msg:
+        return "HTTP_TIMEOUT"
+    if "mapping" in msg or "cast" in msg or "xsd:date" in msg:
+        return "MAPPING_ERROR"
+    if "idoc" in msg or "partner profile" in msg or "we20" in msg:
+        return "IDOC_FAILURE"
+    if "certificate" in msg or "known_hosts" in msg or "ssh" in msg:
+        return "CERT_EXPIRY"
+    return "UNKNOWN"
+
+
 def fetch_failed_messages(top: int = 20) -> list[dict]:
     """Pulls failed MessageProcessingLogs and maps them to our internal incident schema."""
     token = get_token()
@@ -51,12 +67,13 @@ def fetch_failed_messages(top: int = 20) -> list[dict]:
 
     incidents = []
     for m in raw:
+        message = fetch_error_message(m["MessageGuid"], token)
         incidents.append({
             "incident_id": m["MessageGuid"],
             "iflow": m["IntegrationFlowName"],
             "timestamp": m["LogEnd"],
-            "error_type": m.get("LogLevel", "ERROR"),
-            "message": fetch_error_message(m["MessageGuid"], token),
+            "error_type": classify_error_type(message),
+            "message": message,
             "payload_size_kb": 0,
             "retry_count": 0,
             "severity": "P1" if m.get("Status") == "FAILED" else "P2",

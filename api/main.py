@@ -38,6 +38,7 @@ def resolve(incident: Incident):
         "auto_approved": result["approved"],
         "needs_human": result["needs_human"],
         "report": result["report_path"],
+        "report_markdown": Path(result["report_path"]).read_text(),
         "trace": result["log"],
     }
 
