@@ -30,9 +30,16 @@ Return ONLY JSON: {{"root_cause": str, "category": "KNOWN_PATTERN"|"NOVEL", "con
 
     # Ground confidence with retrieval similarity (hybrid signal)
     match = next((h for h in hits if h["error_type"] == inc["error_type"]), None)
+    best = hits[0] if hits else None
     if match and match["similarity"] > 0.2:
         diagnosis["confidence"] = max(diagnosis.get("confidence", 0.5), 0.88)
         diagnosis["kb_resolution"] = match["resolution"]
+    elif best and best["similarity"] > 0.9:
+        # Near-duplicate text match even without a matching taxonomy label — e.g. a freshly-taught
+        # precedent whose error_type classification doesn't line up perfectly. Trust it anyway: this
+        # is what lets the KB "learn" from human-confirmed resolutions via /feedback.
+        diagnosis["confidence"] = max(diagnosis.get("confidence", 0.5), 0.85)
+        diagnosis["kb_resolution"] = best["resolution"]
     elif not match:
         diagnosis["confidence"] = min(diagnosis.get("confidence", 0.5), 0.6)  # novel pattern → force human review
 

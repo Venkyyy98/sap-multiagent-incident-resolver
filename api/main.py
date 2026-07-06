@@ -86,6 +86,42 @@ def execute(req: ExecuteRequest):
         })
 
 
+class Feedback(BaseModel):
+    incident_id: str
+    error_type: str
+    message: str
+    root_cause: str
+    action_code: str
+    steps: list[str]
+
+
+@app.post("/feedback")
+def feedback(fb: Feedback):
+    """Human confirms the real root cause + fix for an escalated incident. Writes it back into the
+    knowledge base (both the JSON source of truth and the live ChromaDB collection), so the *next*
+    incident of this kind is recognized with high confidence instead of being escalated again."""
+    from rag.ingest import get_collection
+
+    kb_path = Path("data/knowledge_base.json")
+    kb = json.loads(kb_path.read_text())
+    new_id = f"KB-TAUGHT-{fb.incident_id[:8]}"
+    kb = [d for d in kb if d["id"] != new_id]  # replace if re-taught
+    text = f"{fb.root_cause} {fb.message}"[:600]
+    kb.append({"id": new_id, "error_type": fb.error_type, "text": text, "resolution": fb.action_code})
+    kb_path.write_text(json.dumps(kb, indent=2))
+
+    action_map_path = Path("data/action_map.json")
+    action_map = json.loads(action_map_path.read_text()) if action_map_path.exists() else {}
+    action_map[fb.action_code] = fb.steps
+    action_map_path.write_text(json.dumps(action_map, indent=2))
+
+    col = get_collection()
+    col.upsert(ids=[new_id], documents=[text],
+               metadatas=[{"error_type": fb.error_type, "resolution": fb.action_code}])
+
+    return {"taught": True, "kb_id": new_id, "detail": f"Learned '{fb.action_code}' for {fb.error_type} incidents. Re-run this incident to see it applied."}
+
+
 @app.get("/incidents/sample")
 def sample_incidents():
     return json.loads(Path("data/sample_incidents.json").read_text())
