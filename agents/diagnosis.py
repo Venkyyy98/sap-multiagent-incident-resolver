@@ -1,13 +1,16 @@
-"""Diagnosis Agent: RAG-grounded root cause analysis with structured LLM output."""
+"""Diagnosis Agent: agentic, tool-using root cause analysis grounded in RAG + live tenant evidence."""
 import json
 from orchestrator.state import IncidentState
-from agents.llm import call_llm
+from agents.llm import call_llm_agentic
+from agents.tools import TOOL_SCHEMAS, TOOL_IMPLS
 from rag.retrieve import retrieve_similar
 
 
 def diagnosis_agent(state: IncidentState) -> IncidentState:
     inc = state["enriched"]
     query = f"{inc['error_type']}: {inc['message']}"
+
+    # Initial retrieval seeds the prompt so the model has *something* even if it never calls a tool.
     try:
         hits = retrieve_similar(query, k=3)
     except Exception as e:
@@ -17,12 +20,21 @@ def diagnosis_agent(state: IncidentState) -> IncidentState:
 
     prompt = f"""Incident: {json.dumps(inc, indent=2)}
 
-Similar historical incidents:
+Similar historical incidents (initial search):
 {context}
 
-Return ONLY JSON: {{"root_cause": str, "category": "KNOWN_PATTERN"|"NOVEL", "confidence": 0-1, "evidence": [str]}}"""
+You have tools available: search_knowledge_base (try refined queries if this initial search is weak),
+get_iflow_deployment_info (check for a recent deploy that might explain a regression), and
+count_recent_failures (check whether this is a one-off or a recurring pattern). Use whichever help you
+reach a confident, well-evidenced conclusion — you don't have to call all of them.
 
-    raw = call_llm(prompt, task="diagnosis")
+When you're done investigating, respond with ONLY this JSON (no tool call):
+{{"root_cause": str, "category": "KNOWN_PATTERN"|"NOVEL", "confidence": 0-1, "evidence": [str]}}"""
+
+    raw, tool_trace = call_llm_agentic(prompt, tools=TOOL_SCHEMAS, tool_impls=TOOL_IMPLS)
+    for line in tool_trace:
+        state["log"].append(f"[Diagnosis] {line}")
+
     try:
         diagnosis = json.loads(raw.replace("```json", "").replace("```", "").strip())
     except json.JSONDecodeError:
