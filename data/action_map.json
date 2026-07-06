@@ -1,36 +1,57 @@
 {
-  "ROTATE_CREDENTIALS": [
-    "Rotate client secret in CPI Security Material",
-    "Redeploy iFlow",
-    "Retry failed messages"
-  ],
-  "ENABLE_PAGINATION": [
-    "Enable pagination (batch 200) in request-reply",
-    "Raise HTTP timeout to 120s",
-    "Reprocess payload"
-  ],
-  "PATCH_MAPPING": [
-    "Add mapWithDefault for optional date fields",
-    "Deploy mapping patch",
-    "Reprocess message"
-  ],
-  "ESCALATE_TO_BASIS": [
-    "Create WE20 partner profile",
-    "Reprocess SM58 tRFC entries",
-    "Confirm with Basis team"
-  ],
-  "UPDATE_KEYSTORE": [
-    "Import new SSH host key to known_hosts",
-    "Renew certificate",
-    "Redeploy and test connection"
-  ],
-  "ASYNC_DECOUPLE": [
-    "Introduce JMS queue between sender/receiver",
-    "Redeploy split iFlows"
-  ],
-  "FIX_SCRIPT_BUG": [
-    "Open script2.groovy in the iFlow",
-    "Remove or fix the faulty/intentional line",
-    "Redeploy and retest"
-  ]
+  "ROTATE_CREDENTIALS": {
+    "execution_type": "STOP",
+    "steps": [
+      "Rotate client secret in CPI Security Material",
+      "Redeploy iFlow",
+      "Retry failed messages"
+    ]
+  },
+  "ENABLE_PAGINATION": {
+    "execution_type": "REDEPLOY",
+    "steps": [
+      "Enable pagination (batch 200) in request-reply",
+      "Raise HTTP timeout to 120s",
+      "Reprocess payload"
+    ]
+  },
+  "PATCH_MAPPING": {
+    "execution_type": "STOP",
+    "steps": [
+      "Add mapWithDefault for optional date fields",
+      "Deploy mapping patch",
+      "Reprocess message"
+    ]
+  },
+  "ESCALATE_TO_BASIS": {
+    "execution_type": "NONE",
+    "steps": [
+      "Create WE20 partner profile",
+      "Reprocess SM58 tRFC entries",
+      "Confirm with Basis team"
+    ]
+  },
+  "UPDATE_KEYSTORE": {
+    "execution_type": "STOP",
+    "steps": [
+      "Import new SSH host key to known_hosts",
+      "Renew certificate",
+      "Redeploy and test connection"
+    ]
+  },
+  "ASYNC_DECOUPLE": {
+    "execution_type": "REDEPLOY",
+    "steps": [
+      "Introduce JMS queue between sender/receiver",
+      "Redeploy split iFlows"
+    ]
+  },
+  "FIX_SCRIPT_BUG": {
+    "execution_type": "NONE",
+    "steps": [
+      "Open script2.groovy in the iFlow",
+      "Remove or fix the faulty/intentional line",
+      "Redeploy and retest"
+    ]
+  }
 }

@@ -190,14 +190,31 @@ async function resolveIncident(incJson){
   const statusText = data.auto_approved ? '✔ Auto-approved' : '⚠ Needs human review';
   const stepsHtml = (data.remediation.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
 
+  const execType = data.remediation.execution_type || 'NONE';
   let actionPanel = '';
-  if (data.auto_approved){
+  if (data.auto_approved && execType === 'STOP'){
     actionPanel = `
       <div class="action-panel">
-        <p class="hint">This only attempts a safe restart-and-observe mitigation — it does not itself rotate
-        credentials, patch code, or perform architecture changes. Those still require the manual steps above.</p>
-        <button class="secondary" id="exec-btn-${inc.incident_id}" onclick="executeMitigation('${inc.incident_id}')">⚙ Attempt Safe Mitigation (redeploy + verify)</button>
+        <p class="hint">This root cause (bad payload / expired cert or credential) will keep failing or
+        mis-processing every message while the flow runs. The safe automatic mitigation is to <b>stop the flow</b>
+        to contain the damage — then a human applies the real fix from the steps above and redeploys.</p>
+        <button class="secondary" id="exec-btn-${inc.incident_id}" onclick="executeMitigation('${inc.incident_id}')">⏸ Stop iFlow (halt further failures)</button>
         <div id="exec-outcome-${inc.incident_id}"></div>
+      </div>`;
+  } else if (data.auto_approved && execType === 'REDEPLOY'){
+    actionPanel = `
+      <div class="action-panel">
+        <p class="hint">This looks like transient runtime state. The safe automatic mitigation is to <b>redeploy</b>
+        (restart) the flow and watch for new failures. It does not itself patch code or change architecture —
+        those structural fixes remain the manual steps above.</p>
+        <button class="secondary" id="exec-btn-${inc.incident_id}" onclick="executeMitigation('${inc.incident_id}')">⚙ Redeploy &amp; verify</button>
+        <div id="exec-outcome-${inc.incident_id}"></div>
+      </div>`;
+  } else if (data.auto_approved){
+    actionPanel = `
+      <div class="action-panel">
+        <p class="hint">Diagnosis is confident, but this remediation isn't on the auto-executable allowlist —
+        it needs human judgment or access outside this system. Follow the recommended steps above.</p>
       </div>`;
   } else {
     const stepsPrefill = (data.remediation.steps || []).join('\n');
@@ -235,18 +252,22 @@ async function resolveIncident(incJson){
 
 async function executeMitigation(incidentId){
   const {incident, data} = lastResults[incidentId];
+  const execType = data.remediation.execution_type || 'NONE';
+  const restLabel = execType === 'STOP' ? '⏸ Stop iFlow (halt further failures)' : '⚙ Redeploy & verify';
+  const busyLabel = execType === 'STOP' ? 'Stopping the flow…' : 'Redeploying and verifying… (can take a few minutes)';
   const btn = document.getElementById(`exec-btn-${incidentId}`);
   const outcomeEl = document.getElementById(`exec-outcome-${incidentId}`);
-  btn.disabled = true; btn.textContent = 'Redeploying and verifying… (can take up to a few minutes)';
+  btn.disabled = true; btn.textContent = busyLabel;
   outcomeEl.innerHTML = '';
   const res = await fetch(`${API}/execute`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-    incident_id: incidentId, iflow: incident.iflow,
+    incident_id: incidentId, iflow: incident.iflow, action: data.remediation.action,
     confidence: data.diagnosis.confidence, risk: data.remediation.risk, auto_approved: data.auto_approved,
   })});
   const result = await res.json();
-  btn.disabled = false; btn.textContent = '⚙ Attempt Safe Mitigation (redeploy + verify)';
-  const cls = result.outcome && result.outcome.startsWith('MITIGATED') ? 'exec-good'
-            : result.outcome === 'NOT_ELIGIBLE' || result.outcome === 'NOT_EXECUTABLE' ? 'exec-warn' : 'exec-bad';
+  btn.disabled = false; btn.textContent = restLabel;
+  const good = result.outcome && (result.outcome.startsWith('MITIGATED') || result.outcome === 'STOPPED');
+  const warn = ['NOT_ELIGIBLE', 'NOT_EXECUTABLE', 'RECOMMEND_ONLY', 'MITIGATED_UNVERIFIED', 'STOP_INCOMPLETE', 'REDEPLOY_INCOMPLETE'].includes(result.outcome);
+  const cls = good ? 'exec-good' : warn ? 'exec-warn' : 'exec-bad';
   const traceHtml = (result.trace || []).map(escapeHtml).join('<br>');
   outcomeEl.innerHTML = `<div class="exec-outcome ${cls}"><b>${escapeHtml(result.outcome || 'UNKNOWN')}</b><br>${escapeHtml(result.detail || '')}${traceHtml ? '<br><br>'+traceHtml : ''}</div>`;
 }

@@ -63,6 +63,7 @@ def resolve(incident: Incident):
 class ExecuteRequest(BaseModel):
     incident_id: str
     iflow: str
+    action: str
     confidence: float
     risk: str
     auto_approved: bool
@@ -78,8 +79,12 @@ def execute(req: ExecuteRequest):
             "detail": "Execution requires auto-approved status, LOW risk, and confidence at or above the "
                       f"threshold ({settings.confidence_threshold}). This incident doesn't qualify — a human must act on it.",
         })
+    # Re-derive the execution type from the action map server-side rather than trusting the caller —
+    # the client cannot talk us into a STOP/REDEPLOY the action isn't actually mapped to.
+    action_map = json.loads(Path("data/action_map.json").read_text())
+    execution_type = action_map.get(req.action, {}).get("execution_type", "NONE")
     try:
-        return execute_mitigation(req.iflow, req.incident_id)
+        return execute_mitigation(req.iflow, req.incident_id, execution_type)
     except Exception as e:
         return JSONResponse(status_code=200, content={
             "executed": False, "outcome": "ERROR", "detail": f"{type(e).__name__}: {e}",
@@ -93,6 +98,7 @@ class Feedback(BaseModel):
     root_cause: str
     action_code: str
     steps: list[str]
+    execution_type: str = "NONE"  # freshly-taught actions are recommend-only unless explicitly marked STOP/REDEPLOY
 
 
 @app.post("/feedback")
@@ -112,7 +118,7 @@ def feedback(fb: Feedback):
 
     action_map_path = Path("data/action_map.json")
     action_map = json.loads(action_map_path.read_text()) if action_map_path.exists() else {}
-    action_map[fb.action_code] = fb.steps
+    action_map[fb.action_code] = {"execution_type": fb.execution_type, "steps": fb.steps}
     action_map_path.write_text(json.dumps(action_map, indent=2))
 
     col = get_collection()

@@ -21,7 +21,9 @@ def remediation_agent(state: IncidentState) -> IncidentState:
     action_map = _load_action_map()
 
     if kb_action and kb_action in action_map:
-        remediation = {"action": kb_action, "steps": action_map[kb_action],
+        entry = action_map[kb_action]
+        remediation = {"action": kb_action, "steps": entry["steps"],
+                       "execution_type": entry.get("execution_type", "NONE"),
                        "risk": "LOW" if diag["confidence"] > 0.85 else "MEDIUM"}
     else:
         raw = call_llm(f"Diagnosis: {json.dumps(diag)}\nReturn ONLY JSON: {{\"action\": str, \"steps\": [str], \"risk\": \"LOW\"|\"MEDIUM\"|\"HIGH\"}}",
@@ -30,6 +32,9 @@ def remediation_agent(state: IncidentState) -> IncidentState:
             remediation = json.loads(raw.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
             remediation = {"action": "ESCALATE", "steps": ["Manual review required"], "risk": "HIGH"}
+        # An action the LLM invented (no knowledge-base entry) has no vetted execution type,
+        # so it can never auto-execute against the tenant — it can only be recommended.
+        remediation.setdefault("execution_type", "NONE")
 
     # Human-in-the-loop gate: auto-approve only high-confidence, low-risk fixes
     auto = diag["confidence"] >= settings.confidence_threshold and remediation["risk"] == "LOW"

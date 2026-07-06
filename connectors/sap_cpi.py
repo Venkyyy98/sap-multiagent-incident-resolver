@@ -89,6 +89,42 @@ def poll_until_started(iflow_id: str, timeout_s: int = 180, interval_s: int = 10
     return last
 
 
+def stop_iflow(iflow_id: str) -> None:
+    """Stops (undeploys) a running iFlow so it processes no further messages — the correct mitigation
+    when leaving it running actively causes damage (bad-payload creating wrong records, an expired
+    cert/credential that will just keep failing). Requires the deploy-capable credential. Reversible:
+    a human fixes the root cause and redeploys."""
+    if not deploy_capable():
+        raise RuntimeError("No deploy-capable credential configured (CPI_DEPLOY_CLIENT_ID/SECRET missing in .env)")
+    token = get_deploy_token()
+    s = requests.Session()
+    s.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/json"})
+    csrf = s.get(f"{DEPLOY_BASE_URL}/", headers={"X-CSRF-Token": "Fetch"}, timeout=30).headers.get("x-csrf-token", "")
+    resp = s.delete(f"{DEPLOY_BASE_URL}/IntegrationRuntimeArtifacts('{iflow_id}')",
+                    headers={"X-CSRF-Token": csrf}, timeout=60)
+    resp.raise_for_status()
+
+
+def is_stopped(iflow_id: str) -> bool:
+    """True once the iFlow is no longer deployed to the runtime (a 404 on the runtime artifact)."""
+    token = get_deploy_token() if deploy_capable() else get_token()
+    resp = requests.get(f"{DEPLOY_BASE_URL or BASE_URL}/IntegrationRuntimeArtifacts('{iflow_id}')",
+                        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}, timeout=30)
+    return resp.status_code == 404
+
+
+def poll_until_stopped(iflow_id: str, timeout_s: int = 60, interval_s: int = 5) -> bool:
+    """Polls until the iFlow is undeployed (stop confirmed) or timeout."""
+    import time
+    elapsed = 0
+    while elapsed <= timeout_s:
+        if is_stopped(iflow_id):
+            return True
+        time.sleep(interval_s)
+        elapsed += interval_s
+    return is_stopped(iflow_id)
+
+
 def failures_since(iflow_id: str, since_iso: str) -> list[dict]:
     """Checks MessageProcessingLogs for new FAILED entries on this iFlow since a given time (verification signal)."""
     token = get_deploy_token() if deploy_capable() else get_token()
