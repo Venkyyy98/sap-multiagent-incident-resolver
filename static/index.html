@@ -74,6 +74,21 @@
     white-space:pre-wrap;background:var(--code-bg);border:1px solid var(--code-border);padding:12px;border-radius:8px;
     margin-top:8px;max-height:420px;overflow-y:auto}
   .empty{color:var(--muted);font-size:13px}
+
+  /* Execute / teach panels */
+  .action-panel{margin-top:14px;padding-top:14px;border-top:1px dashed var(--border-strong)}
+  .action-panel .hint{font-size:11px;color:var(--muted);margin:0 0 8px}
+  button.secondary{background:#fff;color:var(--blue);border:1px solid var(--blue)}
+  button.secondary:hover{background:#f0f6fd}
+  .exec-outcome{margin-top:10px;padding:10px;border-radius:8px;font-size:12.5px}
+  .exec-good{background:var(--good-bg);color:var(--good)}
+  .exec-warn{background:var(--warn-bg);color:var(--warn)}
+  .exec-bad{background:var(--bad-bg);color:var(--bad)}
+  .teach-form label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+  .teach-form textarea, .teach-form input{width:100%;font-family:inherit;font-size:12.5px;padding:8px;
+    border:1px solid var(--border-strong);border-radius:6px;color:var(--text);resize:vertical}
+  .teach-form textarea{min-height:56px}
+  .teach-outcome{margin-top:10px;font-size:12.5px}
 </style>
 </head>
 <body>
@@ -154,6 +169,8 @@ async function loadIncidents(){
   renderGrid('grid-sample', await sampleRes.json(), 'No sample incidents found.');
 }
 
+const lastResults = {};   // incident_id -> {incident, resolveData} — used by execute/teach handlers
+
 async function resolveIncident(incJson){
   const inc = JSON.parse(incJson);
   const btn = event.target;
@@ -167,9 +184,38 @@ async function resolveIncident(incJson){
     box.innerHTML = `<div class="kv"><b>Status</b><span class="status human">⚠ ${escapeHtml(data.error)}</span></div>`;
     return;
   }
+  lastResults[inc.incident_id] = {incident: inc, data};
+
   const statusClass = data.auto_approved ? 'approved' : 'human';
   const statusText = data.auto_approved ? '✔ Auto-approved' : '⚠ Needs human review';
   const stepsHtml = (data.remediation.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
+
+  let actionPanel = '';
+  if (data.auto_approved){
+    actionPanel = `
+      <div class="action-panel">
+        <p class="hint">This only attempts a safe restart-and-observe mitigation — it does not itself rotate
+        credentials, patch code, or perform architecture changes. Those still require the manual steps above.</p>
+        <button class="secondary" id="exec-btn-${inc.incident_id}" onclick="executeMitigation('${inc.incident_id}')">⚙ Attempt Safe Mitigation (redeploy + verify)</button>
+        <div id="exec-outcome-${inc.incident_id}"></div>
+      </div>`;
+  } else {
+    const stepsPrefill = (data.remediation.steps || []).join('\n');
+    actionPanel = `
+      <div class="action-panel teach-form">
+        <p class="hint">If you've confirmed the real fix for this, teach it — the next similar incident will
+        be recognized automatically instead of being escalated again.</p>
+        <label>Confirmed root cause</label>
+        <textarea id="teach-cause-${inc.incident_id}">${escapeHtml(data.diagnosis.root_cause)}</textarea>
+        <label>Action code (short, e.g. FIX_SCRIPT_BUG)</label>
+        <input id="teach-action-${inc.incident_id}" placeholder="e.g. FIX_SCRIPT_BUG">
+        <label>Remediation steps (one per line)</label>
+        <textarea id="teach-steps-${inc.incident_id}">${escapeHtml(stepsPrefill)}</textarea>
+        <button class="secondary" style="margin-top:10px" onclick="submitFeedback('${inc.incident_id}')">✎ Confirm fix &amp; teach</button>
+        <div id="teach-outcome-${inc.incident_id}" class="teach-outcome"></div>
+      </div>`;
+  }
+
   box.innerHTML = `
     <div class="kv"><b>Priority score</b><span>${data.priority_score}</span></div>
     <div class="kv"><b>Root cause</b><span>${escapeHtml(data.diagnosis.root_cause)}</span></div>
@@ -183,7 +229,44 @@ async function resolveIncident(incJson){
     <div class="trace">${data.trace.map(escapeHtml).join('\n')}</div>
     <button class="report-toggle" id="report-btn-${inc.incident_id}" onclick="toggleReport('${inc.incident_id}')">▾ View full postmortem report</button>
     <div class="report" id="report-${inc.incident_id}">${escapeHtml(data.report_markdown)}</div>
+    ${actionPanel}
   `;
+}
+
+async function executeMitigation(incidentId){
+  const {incident, data} = lastResults[incidentId];
+  const btn = document.getElementById(`exec-btn-${incidentId}`);
+  const outcomeEl = document.getElementById(`exec-outcome-${incidentId}`);
+  btn.disabled = true; btn.textContent = 'Redeploying and verifying… (can take up to a few minutes)';
+  outcomeEl.innerHTML = '';
+  const res = await fetch(`${API}/execute`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+    incident_id: incidentId, iflow: incident.iflow,
+    confidence: data.diagnosis.confidence, risk: data.remediation.risk, auto_approved: data.auto_approved,
+  })});
+  const result = await res.json();
+  btn.disabled = false; btn.textContent = '⚙ Attempt Safe Mitigation (redeploy + verify)';
+  const cls = result.outcome && result.outcome.startsWith('MITIGATED') ? 'exec-good'
+            : result.outcome === 'NOT_ELIGIBLE' || result.outcome === 'NOT_EXECUTABLE' ? 'exec-warn' : 'exec-bad';
+  const traceHtml = (result.trace || []).map(escapeHtml).join('<br>');
+  outcomeEl.innerHTML = `<div class="exec-outcome ${cls}"><b>${escapeHtml(result.outcome || 'UNKNOWN')}</b><br>${escapeHtml(result.detail || '')}${traceHtml ? '<br><br>'+traceHtml : ''}</div>`;
+}
+
+async function submitFeedback(incidentId){
+  const {incident} = lastResults[incidentId];
+  const rootCause = document.getElementById(`teach-cause-${incidentId}`).value.trim();
+  const actionCode = document.getElementById(`teach-action-${incidentId}`).value.trim().toUpperCase().replace(/\s+/g, '_');
+  const steps = document.getElementById(`teach-steps-${incidentId}`).value.split('\n').map(s => s.trim()).filter(Boolean);
+  const outcomeEl = document.getElementById(`teach-outcome-${incidentId}`);
+  if (!actionCode || !steps.length){
+    outcomeEl.innerHTML = `<span style="color:var(--bad)">Action code and at least one step are required.</span>`;
+    return;
+  }
+  const res = await fetch(`${API}/feedback`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+    incident_id: incidentId, error_type: incident.error_type, message: incident.message,
+    root_cause: rootCause, action_code: actionCode, steps,
+  })});
+  const result = await res.json();
+  outcomeEl.innerHTML = `<span style="color:var(--good)">✔ ${escapeHtml(result.detail)}</span>`;
 }
 
 loadIncidents();
