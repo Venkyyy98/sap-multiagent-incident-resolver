@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from orchestrator.graph import pipeline
+from agents.executor import execute_mitigation
+from config import settings
 
 app = FastAPI(title="SAP IntelliOps — Multi-Agent Incident Resolver")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -56,6 +58,32 @@ def resolve(incident: Incident):
         "report_markdown": Path(result["report_path"]).read_text(),
         "trace": result["log"],
     }
+
+
+class ExecuteRequest(BaseModel):
+    incident_id: str
+    iflow: str
+    confidence: float
+    risk: str
+    auto_approved: bool
+
+
+@app.post("/execute")
+def execute(req: ExecuteRequest):
+    # Never trust the client alone for something this consequential — re-check the gate server-side.
+    if not (req.auto_approved and req.risk == "LOW" and req.confidence >= settings.confidence_threshold):
+        return JSONResponse(status_code=200, content={
+            "executed": False,
+            "outcome": "NOT_ELIGIBLE",
+            "detail": "Execution requires auto-approved status, LOW risk, and confidence at or above the "
+                      f"threshold ({settings.confidence_threshold}). This incident doesn't qualify — a human must act on it.",
+        })
+    try:
+        return execute_mitigation(req.iflow, req.incident_id)
+    except Exception as e:
+        return JSONResponse(status_code=200, content={
+            "executed": False, "outcome": "ERROR", "detail": f"{type(e).__name__}: {e}",
+        })
 
 
 @app.get("/incidents/sample")

@@ -24,12 +24,80 @@ CLIENT_ID = os.getenv("CPI_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("CPI_CLIENT_SECRET", "")
 BASE_URL = os.getenv("CPI_BASE_URL", "")
 
+# Separate, deploy-capable service key (WorkspaceArtifactsDeploy/NodeManager.deploycontent scopes).
+# The read-only key above cannot deploy — see connectors/sap_cpi.py history / README for why these
+# are deliberately two different credentials rather than one over-privileged one.
+DEPLOY_TOKEN_URL = os.getenv("CPI_DEPLOY_TOKEN_URL", "")
+DEPLOY_CLIENT_ID = os.getenv("CPI_DEPLOY_CLIENT_ID", "")
+DEPLOY_CLIENT_SECRET = os.getenv("CPI_DEPLOY_CLIENT_SECRET", "")
+DEPLOY_BASE_URL = os.getenv("CPI_DEPLOY_BASE_URL", "")
+
 
 def get_token() -> str:
     resp = requests.post(TOKEN_URL, data={"grant_type": "client_credentials"},
                           auth=(CLIENT_ID, CLIENT_SECRET), timeout=30)
     resp.raise_for_status()
     return resp.json()["access_token"]
+
+
+def deploy_capable() -> bool:
+    return bool(DEPLOY_TOKEN_URL and DEPLOY_CLIENT_ID and DEPLOY_CLIENT_SECRET and DEPLOY_BASE_URL)
+
+
+def get_deploy_token() -> str:
+    resp = requests.post(DEPLOY_TOKEN_URL, data={"grant_type": "client_credentials"},
+                          auth=(DEPLOY_CLIENT_ID, DEPLOY_CLIENT_SECRET), timeout=30)
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
+def get_runtime_status(iflow_id: str) -> dict:
+    """Reads current deployment status of an iFlow (works with either credential set)."""
+    token = get_deploy_token() if deploy_capable() else get_token()
+    resp = requests.get(f"{DEPLOY_BASE_URL or BASE_URL}/IntegrationRuntimeArtifacts('{iflow_id}')",
+                        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}, timeout=30)
+    resp.raise_for_status()
+    return resp.json()["d"]
+
+
+def redeploy_iflow(iflow_id: str) -> str:
+    """Redeploys (restarts) an iFlow. Requires the deploy-capable credential. Returns the async task id."""
+    if not deploy_capable():
+        raise RuntimeError("No deploy-capable credential configured (CPI_DEPLOY_CLIENT_ID/SECRET missing in .env)")
+    token = get_deploy_token()
+    s = requests.Session()
+    s.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/json"})
+    csrf_resp = s.get(f"{DEPLOY_BASE_URL}/", headers={"X-CSRF-Token": "Fetch"}, timeout=30)
+    csrf = csrf_resp.headers.get("x-csrf-token", "")
+    resp = s.post(f"{DEPLOY_BASE_URL}/DeployIntegrationDesigntimeArtifact?Id='{iflow_id}'&Version='active'",
+                  headers={"X-CSRF-Token": csrf}, timeout=60)
+    resp.raise_for_status()
+    return resp.text.strip()
+
+
+def poll_until_started(iflow_id: str, timeout_s: int = 180, interval_s: int = 10) -> dict:
+    """Polls runtime status until STARTED or timeout. Returns the final status dict."""
+    import time
+    elapsed = 0
+    last = {}
+    while elapsed <= timeout_s:
+        last = get_runtime_status(iflow_id)
+        if last.get("Status") == "STARTED":
+            return last
+        time.sleep(interval_s)
+        elapsed += interval_s
+    return last
+
+
+def failures_since(iflow_id: str, since_iso: str) -> list[dict]:
+    """Checks MessageProcessingLogs for new FAILED entries on this iFlow since a given time (verification signal)."""
+    token = get_deploy_token() if deploy_capable() else get_token()
+    url = (f"{DEPLOY_BASE_URL or BASE_URL}/MessageProcessingLogs"
+           f"?$filter=IntegrationFlowName eq '{iflow_id}' and Status eq 'FAILED' and LogEnd gt datetime'{since_iso}'"
+           f"&$format=json")
+    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+    resp.raise_for_status()
+    return resp.json()["d"]["results"]
 
 
 def fetch_error_message(guid: str, token: str) -> str:
