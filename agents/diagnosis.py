@@ -40,8 +40,13 @@ When you're done investigating, respond with ONLY this JSON (no tool call):
     except json.JSONDecodeError:
         diagnosis = {"root_cause": raw[:300], "category": "NOVEL", "confidence": 0.4, "evidence": []}
 
-    # Ground confidence with retrieval similarity (hybrid signal)
-    match = next((h for h in hits if h["error_type"] == inc["error_type"]), None)
+    # Ground confidence with retrieval similarity (hybrid signal).
+    # "UNKNOWN" is a sentinel meaning "no known category matched" — it is not itself a reusable
+    # taxonomy bucket. Excluding it here matters: without this, teaching ONE fix for one novel
+    # "UNKNOWN" incident would silently become a wildcard that boosts confidence for every future
+    # unrelated novel error, since they'd all share the same "UNKNOWN" label. Only a genuine
+    # near-duplicate text match (below) should earn trust for incidents in this bucket.
+    match = next((h for h in hits if h["error_type"] == inc["error_type"] and inc["error_type"] != "UNKNOWN"), None)
     best = hits[0] if hits else None
     if match and match["similarity"] > 0.2:
         diagnosis["confidence"] = max(diagnosis.get("confidence", 0.5), 0.88)

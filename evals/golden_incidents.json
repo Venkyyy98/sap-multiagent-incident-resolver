@@ -1,0 +1,122 @@
+[
+  {
+    "incident_id": "EVAL-001", "iflow": "S4_to_Salesforce_OrderSync", "timestamp": "2026-06-01T08:14:22Z",
+    "error_type": "HTTP_TIMEOUT", "message": "com.sap.it.rt.adapter.http.api.exception.HttpResponseException: Read timed out after 90000ms calling https://api.salesforce.com/services/data/v58.0/sobjects/Order. Payload was 6.4MB, large batch synchronous export.",
+    "payload_size_kb": 6400, "retry_count": 2, "severity": "P2",
+    "expected_error_type": "HTTP_TIMEOUT", "expected_action": "ENABLE_PAGINATION", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-002", "iflow": "Bulk_Product_Export", "timestamp": "2026-06-01T09:00:00Z",
+    "error_type": "HTTP_TIMEOUT", "message": "HttpResponseException: Connection timed out sending 8MB product catalog payload to receiver in a single synchronous call.",
+    "payload_size_kb": 8100, "retry_count": 1, "severity": "P2",
+    "expected_error_type": "HTTP_TIMEOUT", "expected_action": "ENABLE_PAGINATION", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-003", "iflow": "MonthEnd_GL_Posting", "timestamp": "2026-06-02T23:58:11Z",
+    "error_type": "HTTP_TIMEOUT", "message": "HttpResponseException: Recurring timeout failures during month-end close, peak concurrent load causing synchronous call queue backup.",
+    "payload_size_kb": 120, "retry_count": 4, "severity": "P1",
+    "expected_error_type": "HTTP_TIMEOUT", "expected_action": "ASYNC_DECOUPLE", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-004", "iflow": "Peak_Order_Intake", "timestamp": "2026-06-02T23:59:40Z",
+    "error_type": "HTTP_TIMEOUT", "message": "HttpResponseException: Repeated timeouts during high-volume peak load window; synchronous sender/receiver coupling causing backpressure.",
+    "payload_size_kb": 95, "retry_count": 6, "severity": "P1",
+    "expected_error_type": "HTTP_TIMEOUT", "expected_action": "ASYNC_DECOUPLE", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-005", "iflow": "SF_EC_to_S4_Employee", "timestamp": "2026-06-03T09:02:10Z",
+    "error_type": "AUTH_FAILURE", "message": "401 Unauthorized: OAuth2 token request failed - invalid_client. Client credentials rejected by token endpoint https://auth.example.com/oauth/token",
+    "payload_size_kb": 12, "retry_count": 5, "severity": "P1",
+    "expected_error_type": "AUTH_FAILURE", "expected_action": "ROTATE_CREDENTIALS", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-006", "iflow": "Vendor_Portal_Sync", "timestamp": "2026-06-03T10:00:00Z",
+    "error_type": "AUTH_FAILURE", "message": "OAuth2 client credentials grant failed with 401 invalid_client - bad client secret, likely expired in Security Material.",
+    "payload_size_kb": 8, "retry_count": 3, "severity": "P1",
+    "expected_error_type": "AUTH_FAILURE", "expected_action": "ROTATE_CREDENTIALS", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-007", "iflow": "HR_Payroll_Feed", "timestamp": "2026-06-03T11:00:00Z",
+    "error_type": "AUTH_FAILURE", "message": "Unauthorized (401): invalid_client error from OAuth token endpoint, client secret rejected.",
+    "payload_size_kb": 20, "retry_count": 2, "severity": "P1",
+    "expected_error_type": "AUTH_FAILURE", "expected_action": "ROTATE_CREDENTIALS", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-008", "iflow": "CRM_Lead_Push", "timestamp": "2026-06-03T12:00:00Z",
+    "error_type": "AUTH_FAILURE", "message": "401 Unauthorized calling CRM API - invalid_client, OAuth2 credentials no longer valid.",
+    "payload_size_kb": 5, "retry_count": 4, "severity": "P1",
+    "expected_error_type": "AUTH_FAILURE", "expected_action": "ROTATE_CREDENTIALS", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-009", "iflow": "EDI_856_ASN_Inbound", "timestamp": "2026-06-04T10:45:33Z",
+    "error_type": "MAPPING_ERROR", "message": "Message Mapping failed: RuntimeException in target field /ASN/DeliveryDate - Cannot cast empty string to xsd:date. Source segment DTM missing in EDI payload",
+    "payload_size_kb": 88, "retry_count": 0, "severity": "P2",
+    "expected_error_type": "MAPPING_ERROR", "expected_action": "PATCH_MAPPING", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-010", "iflow": "EDI_850_PO_Inbound", "timestamp": "2026-06-04T11:00:00Z",
+    "error_type": "MAPPING_ERROR", "message": "Mapping exception: cannot cast empty string to xsd:date in target field /PO/RequestedDeliveryDate, optional DTM segment absent.",
+    "payload_size_kb": 60, "retry_count": 0, "severity": "P2",
+    "expected_error_type": "MAPPING_ERROR", "expected_action": "PATCH_MAPPING", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-011", "iflow": "EDI_810_Invoice_Inbound", "timestamp": "2026-06-04T12:00:00Z",
+    "error_type": "MAPPING_ERROR", "message": "Message mapping RuntimeException: xsd:date cast failure on /Invoice/DueDate, DTM qualifier missing from source EDI segment.",
+    "payload_size_kb": 45, "retry_count": 1, "severity": "P2",
+    "expected_error_type": "MAPPING_ERROR", "expected_action": "PATCH_MAPPING", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-012", "iflow": "IDoc_ORDERS05_to_S4", "timestamp": "2026-06-05T11:20:05Z",
+    "error_type": "IDOC_FAILURE", "message": "IDoc adapter error: Partner profile not found for partner LS/VENDOR_ACME/ORDERS05. tRFC queue entry stuck in SM58",
+    "payload_size_kb": 34, "retry_count": 1, "severity": "P1",
+    "expected_error_type": "IDOC_FAILURE", "expected_action": "ESCALATE_TO_BASIS", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-013", "iflow": "IDoc_DESADV_to_S4", "timestamp": "2026-06-05T12:00:00Z",
+    "error_type": "IDOC_FAILURE", "message": "IDoc partner profile not found for partner LS/CARRIER_DHL/DESADV01, tRFC entries stuck in SM58 queue.",
+    "payload_size_kb": 28, "retry_count": 2, "severity": "P1",
+    "expected_error_type": "IDOC_FAILURE", "expected_action": "ESCALATE_TO_BASIS", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-014", "iflow": "Bank_Payment_SFTP_Push", "timestamp": "2026-06-06T12:07:44Z",
+    "error_type": "CERT_EXPIRY", "message": "SFTP connection failed: SSH host key verification failed. Known_hosts entry outdated after bank server migration; certificate expires 2026-07-03",
+    "payload_size_kb": 210, "retry_count": 2, "severity": "P1",
+    "expected_error_type": "CERT_EXPIRY", "expected_action": "UPDATE_KEYSTORE", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-015", "iflow": "Partner_SFTP_Statement_Pull", "timestamp": "2026-06-06T13:00:00Z",
+    "error_type": "CERT_EXPIRY", "message": "SFTP handshake failed: known_hosts mismatch after partner server migration; SSH host certificate near expiry.",
+    "payload_size_kb": 150, "retry_count": 1, "severity": "P1",
+    "expected_error_type": "CERT_EXPIRY", "expected_action": "UPDATE_KEYSTORE", "expected_escalate": false
+  },
+  {
+    "incident_id": "EVAL-016", "iflow": "Custom_Warehouse_Adapter", "timestamp": "2026-06-07T14:00:00Z",
+    "error_type": "UNKNOWN", "message": "com.sap.it.rt.adapter.http.api.exception.HttpResponseException: NullPointerException in custom Groovy script 'enrichWarehouseCode.groovy' at line 42 - undocumented internal error, first occurrence.",
+    "payload_size_kb": 15, "retry_count": 0, "severity": "P2",
+    "expected_error_type": "UNKNOWN", "expected_action": null, "expected_escalate": true
+  },
+  {
+    "incident_id": "EVAL-017", "iflow": "Legacy_Mainframe_Bridge", "timestamp": "2026-06-07T15:00:00Z",
+    "error_type": "UNKNOWN", "message": "Unexpected adapter fault: proprietary binary protocol handshake returned code 0x4F2, no documentation available, never seen before.",
+    "payload_size_kb": 40, "retry_count": 0, "severity": "P2",
+    "expected_error_type": "UNKNOWN", "expected_action": null, "expected_escalate": true
+  },
+  {
+    "incident_id": "EVAL-018", "iflow": "New_Vendor_Onboarding_Flow", "timestamp": "2026-06-07T16:00:00Z",
+    "error_type": "UNKNOWN", "message": "Script step 'validateVendorPayload.groovy' threw a custom ValidationException with an undocumented internal error code never logged before.",
+    "payload_size_kb": 22, "retry_count": 0, "severity": "P2",
+    "expected_error_type": "UNKNOWN", "expected_action": null, "expected_escalate": true
+  },
+  {
+    "incident_id": "EVAL-019", "iflow": "Experimental_ML_Scoring_Hook", "timestamp": "2026-06-07T17:00:00Z",
+    "error_type": "UNKNOWN", "message": "Groovy script exception: unexpected null in scoring response parser, this integration is brand new and has no failure history.",
+    "payload_size_kb": 5, "retry_count": 0, "severity": "P3",
+    "expected_error_type": "UNKNOWN", "expected_action": null, "expected_escalate": true
+  },
+  {
+    "incident_id": "EVAL-020", "iflow": "Test-OAuth-Fail-Flow", "timestamp": "2026-07-04T21:39:00Z",
+    "error_type": "AUTH_FAILURE", "message": "com.sap.it.rt.adapter.http.api.exception.HttpResponseException: An internal server error occured: Status code:401; Reason:{\"error\":\"invalid_client\",\"error_description\":\"Bad credentials\"}.",
+    "payload_size_kb": 0, "retry_count": 0, "severity": "P1",
+    "expected_error_type": "AUTH_FAILURE", "expected_action": "ROTATE_CREDENTIALS", "expected_escalate": false
+  }
+]
