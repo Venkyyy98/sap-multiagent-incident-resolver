@@ -54,6 +54,7 @@ def resolve(incident: Incident):
         "remediation": result["remediation"],
         "auto_approved": result["approved"],
         "needs_human": result["needs_human"],
+        "auto_action": result.get("auto_action", {"triggered": False}),
         "report": result["report_path"],
         "report_markdown": Path(result["report_path"]).read_text(),
         "trace": result["log"],

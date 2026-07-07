@@ -15,6 +15,8 @@ class IncidentState(TypedDict, total=False):
     remediation: dict          # {action, steps, risk}
     approved: bool
     needs_human: bool
+    # Circuit-breaker agent output (autonomous stop)
+    auto_action: dict          # {triggered, success?, failure_count?, detail}
     # Reporting agent output
     report_path: Optional[str]
     log: list[str]

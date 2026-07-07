@@ -125,6 +125,14 @@ def poll_until_stopped(iflow_id: str, timeout_s: int = 60, interval_s: int = 5) 
     return is_stopped(iflow_id)
 
 
+def recent_failure_count(iflow_id: str, hours: int = 24) -> int:
+    """How many times this iFlow has failed in the last `hours` — the signal the circuit breaker
+    trips on. Raises if the tenant is unreachable, so callers can decide to hold rather than guess."""
+    from datetime import datetime, timedelta, timezone
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S")
+    return len(failures_since(iflow_id, since))
+
+
 def failures_since(iflow_id: str, since_iso: str) -> list[dict]:
     """Checks MessageProcessingLogs for new FAILED entries on this iFlow since a given time (verification signal)."""
     token = get_deploy_token() if deploy_capable() else get_token()

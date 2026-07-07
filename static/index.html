@@ -191,8 +191,21 @@ async function resolveIncident(incJson){
   const stepsHtml = (data.remediation.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
 
   const execType = data.remediation.execution_type || 'NONE';
+  const autoAct = data.auto_action || {triggered:false};
   let actionPanel = '';
-  if (data.auto_approved && execType === 'STOP'){
+  if (autoAct.triggered && autoAct.success){
+    actionPanel = `
+      <div class="action-panel">
+        <div class="exec-outcome exec-good"><b>🛑 Circuit breaker tripped — flow auto-stopped, no human needed</b><br>
+        ${escapeHtml(autoAct.detail || '')}</div>
+      </div>`;
+  } else if (autoAct.triggered && !autoAct.success){
+    actionPanel = `
+      <div class="action-panel">
+        <div class="exec-outcome exec-bad"><b>⚠ Circuit breaker tried to auto-stop but couldn't</b><br>
+        ${escapeHtml(autoAct.detail || '')}</div>
+      </div>`;
+  } else if (data.auto_approved && execType === 'STOP'){
     actionPanel = `
       <div class="action-panel">
         <p class="hint">This root cause (bad payload / expired cert or credential) will keep failing or

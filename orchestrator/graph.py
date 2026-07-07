@@ -4,6 +4,7 @@ from orchestrator.state import IncidentState
 from agents.monitor import monitor_agent
 from agents.diagnosis import diagnosis_agent
 from agents.remediation import remediation_agent
+from agents.circuit_breaker import circuit_breaker_agent
 from agents.reporting import reporting_agent
 
 
@@ -17,13 +18,15 @@ def build_graph():
     g.add_node("monitor", monitor_agent)
     g.add_node("diagnosis", diagnosis_agent)
     g.add_node("remediation", remediation_agent)
+    g.add_node("circuit_breaker", circuit_breaker_agent)
     g.add_node("reporting", reporting_agent)
 
     g.set_entry_point("monitor")
     g.add_conditional_edges("monitor", route_after_monitor,
                             {"diagnosis": "diagnosis", "reporting": "reporting"})
     g.add_edge("diagnosis", "remediation")
-    g.add_edge("remediation", "reporting")
+    g.add_edge("remediation", "circuit_breaker")
+    g.add_edge("circuit_breaker", "reporting")
     g.add_edge("reporting", END)
     return g.compile()
 
