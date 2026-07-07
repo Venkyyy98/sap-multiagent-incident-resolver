@@ -1,5 +1,7 @@
 """FastAPI service exposing the multi-agent pipeline."""
+import asyncio
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
@@ -8,8 +10,17 @@ from pydantic import BaseModel
 from orchestrator.graph import pipeline
 from agents.executor import execute_mitigation
 from config import settings
+from api import poller
 
-app = FastAPI(title="SAP IntelliOps — Multi-Agent Incident Resolver")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(poller.poll_loop())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="SAP IntelliOps — Multi-Agent Incident Resolver", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -140,6 +151,11 @@ def live_incidents():
     if not path.exists():
         return []
     return json.loads(path.read_text())
+
+
+@app.get("/poll/status")
+def poll_status():
+    return poller.status
 
 
 @app.get("/health")

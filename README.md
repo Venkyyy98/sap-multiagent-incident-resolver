@@ -111,11 +111,13 @@ Three failure classes were **genuinely provoked** on a live SAP CPI trial tenant
 
 | iFlow | Provoked failure | Taxonomy | Confidence | Policy outcome |
 |---|---|---|---|---|
-| `Test-OAuth-Fail-Flow` | OAuth2 `invalid_client` (bad credentials) | `AUTH_FAILURE` | 0.90–0.95 | ✅ Auto-approved → `ROTATE_CREDENTIALS` |
+| `Test-OAuth-Fail-Flow` | OAuth2 `invalid_client` (bad credentials) | `AUTH_FAILURE` | 0.90–0.95 | ✅ Auto-approved → `ROTATE_CREDENTIALS`, then the **circuit breaker autonomously stopped the flow** — no human click — after 3 real triggered failures accumulated within the lookback window (verified against the live tenant, at the default threshold) |
 | `Test-Timeout-Flow` | HTTP timeout / connection reset | `HTTP_TIMEOUT` | 0.88–0.90 | ✅ Auto-approved → `ASYNC_DECOUPLE`, then genuinely **executed** (redeploy confirmed, verification window clean) |
 | `Test-Fail-Flow` | Groovy runtime exception | `UNKNOWN` → taught via `/feedback` | 0.60 → 0.916 after teaching | ⚠ Escalated → ✅ auto-approved on re-run, same incident |
 
 The remaining taxonomy classes (`MAPPING_ERROR`, `IDOC_FAILURE`, `CERT_EXPIRY`) are exercised via curated sample incidents and the golden eval set, since reproducing them live requires additional backend infrastructure beyond this trial tenant.
+
+**On the circuit breaker's idempotency:** several failed messages for the same iFlow can each independently cross the threshold within one batch. The breaker checks whether the flow is already stopped before re-acting, so only the first incident actually trips it — the rest correctly report "already stopped by an earlier incident in this batch" instead of erroring on a redundant action.
 
 ---
 
@@ -156,6 +158,13 @@ CPI_CLIENT_ID=...
 CPI_CLIENT_SECRET=...
 CPI_BASE_URL=https://<tenant>.<region>.hana.ondemand.com/api/v1
 ```
+
+Once configured, the dashboard's background poller (`api/poller.py`) automatically re-pulls failed
+messages from the tenant every `POLL_INTERVAL_SECONDS` (default 90s) — no manual
+`python -m connectors.sap_cpi` run needed. New incidents appear in the dashboard on their own; a
+"🟢 auto-synced Ns ago" indicator and a manual "Sync now" button are both in the Live Incidents
+header. This is genuinely proactive monitoring — new failures are ingested, and if they cross the
+circuit breaker's threshold, auto-contained, without anyone opening the dashboard at all.
 
 ```bash
 python -m connectors.sap_cpi   # ingest genuinely-failed messages → data/live_incidents.json

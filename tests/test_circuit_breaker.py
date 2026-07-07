@@ -18,6 +18,7 @@ def test_breaker_trips_when_failures_exceed_threshold(monkeypatch):
     monkeypatch.setattr(settings, "auto_stop_failure_threshold", 3)
     monkeypatch.setattr("connectors.sap_cpi.recent_failure_count", lambda iflow, hours=24: 5)
     monkeypatch.setattr("connectors.sap_cpi.deploy_capable", lambda: True)
+    monkeypatch.setattr("connectors.sap_cpi.is_stopped", lambda iflow: False)  # not yet stopped
     stopped_calls = []
     monkeypatch.setattr("connectors.sap_cpi.stop_iflow", lambda iflow: stopped_calls.append(iflow))
     monkeypatch.setattr("connectors.sap_cpi.poll_until_stopped", lambda iflow, **kw: True)
@@ -50,6 +51,23 @@ def test_breaker_ignores_non_stop_actions(monkeypatch):
     out = circuit_breaker_agent(_state(execution_type="REDEPLOY"))
     assert out["auto_action"]["triggered"] is False
     assert stopped_calls == []  # a redeploy-type remediation is never auto-stopped
+
+
+def test_breaker_is_idempotent_when_already_stopped(monkeypatch):
+    # Several incidents on the same iFlow can each independently cross the threshold in one
+    # batch — the second one shouldn't re-attempt a stop that already happened.
+    monkeypatch.setattr(settings, "auto_stop_enabled", True)
+    monkeypatch.setattr(settings, "auto_stop_failure_threshold", 3)
+    monkeypatch.setattr("connectors.sap_cpi.recent_failure_count", lambda iflow, hours=24: 5)
+    monkeypatch.setattr("connectors.sap_cpi.deploy_capable", lambda: True)
+    monkeypatch.setattr("connectors.sap_cpi.is_stopped", lambda iflow: True)
+    stop_calls = []
+    monkeypatch.setattr("connectors.sap_cpi.stop_iflow", lambda iflow: stop_calls.append(iflow))
+
+    out = circuit_breaker_agent(_state())
+    assert out["auto_action"]["triggered"] is True
+    assert out["auto_action"]["success"] is True
+    assert stop_calls == []  # must NOT re-issue a stop against an already-stopped flow
 
 
 def test_breaker_respects_disable_flag(monkeypatch):

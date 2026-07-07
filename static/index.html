@@ -112,6 +112,8 @@
       <span class="dot dot-live"></span>
       <h2>Live Incidents</h2>
       <span class="count" id="live-count">— pulled from your SAP CPI tenant</span>
+      <span class="count" id="sync-status" style="margin-left:auto"></span>
+      <button class="secondary" style="margin-left:8px;padding:2px 10px;font-size:12px" onclick="loadIncidents()">🔄 Sync now</button>
     </div>
     <div id="grid-live" class="grid"><div class="card empty">Loading live incidents…</div></div>
 
@@ -138,13 +140,8 @@ function toggleReport(id){
   btn.textContent = open ? '▾ View full postmortem report' : '▴ Hide full postmortem report';
 }
 
-function renderGrid(gridId, incidents, emptyText){
-  const grid = document.getElementById(gridId);
-  if (!incidents.length){
-    grid.innerHTML = `<div class="card empty">${emptyText}</div>`;
-    return;
-  }
-  grid.innerHTML = incidents.map(inc => `
+function cardHtml(inc){
+  return `
     <div class="card" id="card-${inc.incident_id}">
       <div class="row">
         <div class="title">${escapeHtml(inc.incident_id)} <span class="iflow">— ${escapeHtml(inc.iflow)}</span></div>
@@ -153,8 +150,34 @@ function renderGrid(gridId, incidents, emptyText){
       <div class="msg">${escapeHtml(inc.error_type)}: ${escapeHtml(inc.message)}</div>
       <button onclick='resolveIncident(${JSON.stringify(JSON.stringify(inc))})'>▶ Run Agent Pipeline</button>
       <div class="result" id="result-${inc.incident_id}"></div>
-    </div>
-  `).join('');
+    </div>`;
+}
+
+function renderGrid(gridId, incidents, emptyText){
+  const grid = document.getElementById(gridId);
+  if (!incidents.length){
+    grid.innerHTML = `<div class="card empty">${emptyText}</div>`;
+    return;
+  }
+  grid.innerHTML = incidents.map(cardHtml).join('');
+}
+
+// Live grid specifically appends only genuinely-new incidents rather than re-rendering everything —
+// so an auto-poll cycle never collapses a card you already have expanded mid-review.
+function mergeLiveIncidents(incidents){
+  const grid = document.getElementById('grid-live');
+  if (!incidents.length){
+    if (!grid.querySelector('.card:not(.empty)')){
+      grid.innerHTML = '<div class="card empty">No live incidents yet — trigger a failure in your SAP CPI tenant; it will appear here automatically within a minute or two.</div>';
+    }
+    return;
+  }
+  if (grid.querySelector('.card.empty')) grid.innerHTML = '';
+  for (const inc of incidents){
+    if (!document.getElementById(`card-${inc.incident_id}`)){
+      grid.insertAdjacentHTML('beforeend', cardHtml(inc));
+    }
+  }
 }
 
 async function loadIncidents(){
@@ -165,9 +188,30 @@ async function loadIncidents(){
   const live = await liveRes.json();
   document.getElementById('live-count').textContent =
     live.length ? `${live.length} pulled from your SAP CPI tenant` : '— pulled from your SAP CPI tenant';
-  renderGrid('grid-live', live, 'No live incidents yet — trigger a failure in your SAP CPI tenant, then run "python -m connectors.sap_cpi" and refresh this page.');
+  mergeLiveIncidents(live);
   renderGrid('grid-sample', await sampleRes.json(), 'No sample incidents found.');
 }
+
+async function refreshSyncStatus(){
+  try {
+    const s = await (await fetch(`${API}/poll/status`)).json();
+    const el = document.getElementById('sync-status');
+    if (s.last_error && !s.last_success_ts){
+      el.textContent = `⚠ auto-sync idle (${s.last_error})`;
+    } else if (s.last_success_ts){
+      const secondsAgo = Math.max(0, Math.round(Date.now()/1000 - s.last_success_ts));
+      el.textContent = `🟢 auto-synced ${secondsAgo}s ago (every ${s.interval_seconds}s)`;
+    } else {
+      el.textContent = '⏳ auto-sync starting…';
+    }
+  } catch (e) { /* status endpoint not reachable yet — ignore, will retry */ }
+}
+
+// Auto-sync: pick up new failures without a manual click. Merging (not replacing) keeps any
+// open diagnosis panel intact if it's already expanded.
+setInterval(loadIncidents, 20000);
+setInterval(refreshSyncStatus, 5000);
+refreshSyncStatus();
 
 const lastResults = {};   // incident_id -> {incident, resolveData} — used by execute/teach handlers
 

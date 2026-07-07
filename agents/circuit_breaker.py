@@ -43,13 +43,26 @@ def circuit_breaker_agent(state: IncidentState) -> IncidentState:
         return hold(f"{count} failures below threshold {settings.auto_stop_failure_threshold}")
 
     log.append(f"[CircuitBreaker] '{iflow}' failed {count} times (>= {settings.auto_stop_failure_threshold}) "
-               f"with a contain-the-damage root cause — STOPPING AUTOMATICALLY, no human needed")
+               f"with a contain-the-damage root cause")
 
     if not sap_cpi.deploy_capable():
         log.append("[CircuitBreaker] No deploy-capable credential configured — cannot actuate the stop")
         return {**state, "auto_action": {"triggered": True, "success": False, "failure_count": count,
                                          "detail": "Breaker tripped but no deploy credential to actuate the stop."}, "log": log}
 
+    # Idempotency: several incidents on the same iFlow can each independently cross the threshold
+    # in the same batch. If an earlier one already stopped it, don't re-attempt (a repeat DELETE
+    # 404s on an artifact that's already gone) — just report the flow is already contained.
+    try:
+        if sap_cpi.is_stopped(iflow):
+            log.append(f"[CircuitBreaker] '{iflow}' was already stopped (by an earlier incident in this batch) — nothing further to do")
+            return {**state, "auto_action": {"triggered": True, "success": True, "failure_count": count,
+                                             "detail": "Flow was already auto-stopped by the circuit breaker for an earlier "
+                                                       "occurrence of this same failure pattern."}, "log": log}
+    except Exception:
+        pass  # fall through to attempting the stop — is_stopped's own errors shouldn't block a real trip
+
+    log.append(f"[CircuitBreaker] STOPPING AUTOMATICALLY, no human needed")
     try:
         sap_cpi.stop_iflow(iflow)
         stopped = sap_cpi.poll_until_stopped(iflow, timeout_s=60, interval_s=5)

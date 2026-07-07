@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     auto_stop_enabled: bool = True
     auto_stop_failure_threshold: int = 3
     auto_stop_lookback_hours: int = 24
+    # Background poller: automatically refreshes data/live_incidents.json from the live tenant on
+    # a timer, instead of requiring a manual `python -m connectors.sap_cpi` run.
+    poll_enabled: bool = True
+    poll_interval_seconds: int = 90
 
     class Config:
         env_file = ".env"
